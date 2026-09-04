@@ -18,7 +18,7 @@ export function generateChunkTiles(seed, cx, cz) {
   const layers = [];  
   for (let L = 0; L < N_LAYERS; L++) layers.push(new Uint8Array(AREA)); // AIR=0  
   
-  const l0 = layers[0], l1 = layers[1];  
+  const l0 = layers[0];  
   
   for (let lz = 0; lz < CHUNK_SIZE; lz++) {  
     for (let lx = 0; lx < CHUNK_SIZE; lx++) {  
@@ -26,39 +26,10 @@ export function generateChunkTiles(seed, cx, cz) {
       const wz = cz * CHUNK_SIZE + lz;  
       const i = lz * CHUNK_SIZE + lx;  
   
-      // ground floor: mostly walkable, blobby "building" masses from noise  
+      // bare minimum: noise blobs of WALL, everything else FLOOR  
       const n = valueNoise2D(seed, wx * 0.08, wz * 0.08);  
-      if (n > 0.72) {  
-        l0[i] = WALL;  
-        // second story sits on top of building mass, with sparser walls  
-        const n2 = valueNoise2D(seed ^ 0x9e3779b9, wx * 0.2, wz * 0.2);  
-        l1[i] = (n2 > 0.7) ? WALL : FLOOR;  
-      } else {  
-        l0[i] = FLOOR;  
-      }  
+      l0[i] = (n > 0.72) ? WALL : FLOOR;  
     }  
-  }  
-  
-  // deterministically drop ONE stairs tile that links floor 0 -> floor 1,  
-  // placed on an open ground tile adjacent to a building mass.  
-  const rng = chunkRng(seed, cx, cz);  
-  let placed = 0;  
-  for (let tries = 0; tries < 256 && placed < 1; tries++) {  
-    const lx = Math.floor(rng() * CHUNK_SIZE);  
-    const lz = Math.floor(rng() * CHUNK_SIZE);  
-    const i = lz * CHUNK_SIZE + lx;  
-    if (l0[i] !== FLOOR) continue;  
-    // needs a building neighbour so the second story above is real  
-    const neigh = [  
-      lx > 0 ? l0[i - 1] : AIR,  
-      lx < CHUNK_SIZE - 1 ? l0[i + 1] : AIR,  
-      lz > 0 ? l0[i - CHUNK_SIZE] : AIR,  
-      lz < CHUNK_SIZE - 1 ? l0[i + CHUNK_SIZE] : AIR,  
-    ];  
-    if (!neigh.includes(WALL)) continue;  
-    l0[i] = STAIRS;  
-    l1[i] = FLOOR; // make sure you can stand at the top  
-    placed++;  
   }
   
   return layers;  
