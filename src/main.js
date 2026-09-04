@@ -148,4 +148,91 @@ addEventListener("keydown", (e) => {
       for (let tx = px - 1; tx <= px + 1; tx++)  
         if (world.isSolid(tx, tz)) {  
           const d = (tx + 0.5 - player.x) ** 2 + (tz + 0.5 - player.z) ** 2;  
-          if (d < bestD) { bestD = d; best = [tx,
+          if (d < bestD) { bestD = d; best = [tx, tz]; }  
+        }  
+    if (best) world.setTile(best[0], best[1], FLOOR);  
+  }  
+});  
+  
+// ---------- fixed-timestep loop w/ timeScale (wired now, used later) ----------  
+let timeScale = 1, acc = 0, last = performance.now();  
+const STEP = 1 / 60;  
+  
+function update(dt) {  
+  let dx = 0, dz = 0;  
+  if (keys["KeyW"] || keys["ArrowUp"])    dz -= 1;  
+  if (keys["KeyS"] || keys["ArrowDown"])  dz += 1;  
+  if (keys["KeyA"] || keys["ArrowLeft"])  dx -= 1;  
+  if (keys["KeyD"] || keys["ArrowRight"]) dx += 1;  
+  if (dx || dz) {  
+    const l = Math.hypot(dx, dz);  
+    dx = (dx / l) * player.speed * dt;  
+    dz = (dz / l) * player.speed * dt;  
+    if (!collides(player.x + dx, player.z, player.r)) player.x += dx;  
+    if (!collides(player.x, player.z + dz, player.r)) player.z += dz;  
+  }  
+}  
+  
+function resize() {  
+  const w = canvas.clientWidth, h = canvas.clientHeight;  
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }  
+}  
+  
+function draw(mesh, model, tex, tint) {  
+  gl.bindVertexArray(mesh.vao);  
+  gl.bindTexture(gl.TEXTURE_2D, tex);  
+  gl.uniformMatrix4fv(U.model, false, new Float32Array(model));  
+  gl.uniform3fv(U.tint, tint);  
+  gl.drawArrays(gl.TRIANGLES, 0, mesh.count);  
+}  
+  
+const IDENTITY = [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1];  
+  
+function render() {  
+  resize();  
+  gl.viewport(0, 0, canvas.width, canvas.height);  
+  gl.enable(gl.DEPTH_TEST);  
+  gl.clearColor(0.07, 0.07, 0.09, 1);  
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);  
+  gl.useProgram(prog);  
+  gl.activeTexture(gl.TEXTURE0);  
+  gl.uniform1i(U.tex, 0);  
+  
+  // fixed-angle camera that follows the player (angle constant = 3/4 view)  
+  const center = [player.x, 0.5, player.z];  
+  const eye = [center[0] + 6, 9, center[2] + 6];  
+  const proj = m4.perspective(Math.PI / 4, canvas.width / canvas.height, 0.1, 100);  
+  const view = m4.lookAt(eye, center, [0, 1, 0]);  
+  gl.uniformMatrix4fv(U.viewProj, false, new Float32Array(m4.multiply(proj, view)));  
+  
+  // stream + draw chunks (one baked mesh per chunk, one draw call each)  
+  world.update(player.x, player.z, RADIUS);  
+  for (const c of world.loadedChunks(player.x, player.z, RADIUS)) {  
+    if (c.floorMesh.count) draw(c.floorMesh, IDENTITY, floorTex, [1, 1, 1]);  
+    if (c.wallMesh.count)  draw(c.wallMesh,  IDENTITY, wallTex,  [1, 1, 1]);  
+  }  
+  
+  // player as a billboard that always faces the fixed camera  
+  const fwd = m4.norm(m4.sub(eye, center));  
+  const right = m4.norm(m4.cross([0, 1, 0], fwd));  
+  const up = m4.cross(fwd, right);  
+  const w = 0.7, h = 1.2, px = player.x, py = 0.6, pz = player.z;  
+  const billboard = [  
+    right[0]*w, right[1]*w, right[2]*w, 0,  
+    up[0]*h,    up[1]*h,    up[2]*h,    0,  
+    fwd[0],     fwd[1],     fwd[2],     0,  
+    px,         py,         pz,         1,  
+  ];  
+  draw(quad, billboard, whiteTex, [0.9, 0.2, 0.7]);  
+}  
+  
+function frame(now) {  
+  let dt = (now - last) / 1000; last = now;  
+  if (dt > 0.25) dt = 0.25;  
+  acc += dt * timeScale;  
+  while (acc >= STEP) { update(STEP); acc -= STEP; }  
+  render();  
+  requestAnimationFrame(frame);  
+}  
+requestAnimationFrame(frame);  
+console.log("alive");
