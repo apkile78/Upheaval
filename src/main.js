@@ -1,5 +1,7 @@
 import { initGL, createProgram, makeTexture } from "./gl/glutil.js";  
 import * as m4 from "./math/mat4.js";  
+import { World, CHUNK_SIZE } from "./world/world.js";  
+import { hashSeed } from "./world/rng.js";
   
 const canvas = document.getElementById("game");  
 const gl = initGL(canvas);  
@@ -97,30 +99,26 @@ const floorTex = genTex(8, 8, (x, y) => ((x + y) & 1 ? [90,90,95,255] : [70,70,7
 const wallTex  = genTex(8, 8, (x, y) => (y % 4 === 0 || (x + (y < 4 ? 0 : 2)) % 4 === 0)  
                                           ? [60,40,35,255] : [140,80,60,255]);  
 const whiteTex = genTex(1, 1, () => [255,255,255,255]);  
-  
-// ---------- world (hardcoded room) ----------  
-const MAP = [  
-  "############",  
-  "#..........#",  
-  "#..##......#",  
-  "#..........#",  
-  "#......##..#",  
-  "#..........#",  
-  "#..##......#",  
-  "#..........#",  
-  "############",  
-];  
-const isSolid = (tx, tz) =>  
-  tz < 0 || tz >= MAP.length || tx < 0 || tx >= MAP[0].length || MAP[tz][tx] === "#";  
-  
+
 // ---------- player + collision ----------  
-const player = { x: 6, z: 4, speed: 4, r: 0.3 };  
+const worldSeed = hashSeed(new URLSearchParams(location.search).get("seed"));  
+document.getElementById("hud").textContent = "WASD to move — seed: " + worldSeed;  
+const world = new World(worldSeed, gl, makeMesh);  
+const RADIUS = 3; // chunks loaded in each direction around the player  
+  
 function collides(x, z, r) {  
   for (let tz = Math.floor(z - r); tz <= Math.floor(z + r); tz++)  
     for (let tx = Math.floor(x - r); tx <= Math.floor(x + r); tx++)  
-      if (isSolid(tx, tz)) return true;  
+      if (world.isSolid(tx, tz)) return true;  
   return false;  
 }  
+  
+const player = { x: 0.5, z: 0.5, speed: 4, r: 0.3 };  
+// nudge spawn to the first open tile so we don't start inside a wall  
+for (let i = 0; i < 4096 && collides(player.x, player.z, player.r); i++) {  
+  player.x += 1;  
+  if (player.x > 64) { player.x = 0.5; player.z += 1; }  
+}
   
 // ---------- input ----------  
 const keys = {};  
@@ -177,13 +175,12 @@ function render() {
   gl.uniformMatrix4fv(U.viewProj, false, new Float32Array(m4.multiply(proj, view)));  
   
   // floor + walls  
-  for (let tz = 0; tz < MAP.length; tz++)  
-    for (let tx = 0; tx < MAP[tz].length; tx++) {  
-      const cx = tx + 0.5, cz = tz + 0.5;  
-      draw(cube, m4.multiply(m4.translate(cx, 0, cz), m4.scale(1, 0.04, 1)), floorTex, [1,1,1]);  
-      if (MAP[tz][tx] === "#")  
-        draw(cube, m4.translate(cx, 0.5, cz), wallTex, [1,1,1]);  
-    }  
+  world.update(player.x, player.z, RADIUS);  
+  const IDENTITY = [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1];  
+  for (const c of world.loadedChunks(player.x, player.z, RADIUS)) {  
+    if (c.floorMesh.count) draw(c.floorMesh, IDENTITY, floorTex, [1, 1, 1]);  
+    if (c.wallMesh.count)  draw(c.wallMesh,  IDENTITY, wallTex,  [1, 1, 1]);  
+  }
   
   // player as a billboard that always faces the fixed camera  
   const fwd = m4.norm(m4.sub(eye, center));  
