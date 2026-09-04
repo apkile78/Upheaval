@@ -1,4 +1,4 @@
-hing is, in this game i want to be able to oint the vehicle import * as m4 from "./math/mat4.js";  
+import * as m4 from "./math/mat4.js";
 import { World, CHUNK_SIZE, FLOOR, STAIRS } from "./world/world.js";  
 import { hashSeed } from "./world/rng.js";  
   
