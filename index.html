@@ -3,19 +3,20 @@
 <head>  
 <meta charset="utf-8" />  
 <meta name="viewport" content="width=device-width, initial-scale=1" />  
-<title>probably-not-a-very-good-project</title>  
+<title>probably-not-a-very-good-project-</title>  
 <style>  
   html, body { margin: 0; height: 100%; background: #111; overflow: hidden; }  
   #game { display: block; width: 100vw; height: 100vh; }  
   #hud {  
-    position: fixed; top: 8px; left: 8px; color: #ddd;  
-    font: 12px monospace; text-shadow: 1px 1px 0 #000; pointer-events: none;  
+    position: fixed; top: 8px; left: 8px; margin: 0;  
+    font: 13px/1.4 monospace; color: #ddd; white-space: pre;  
+    text-shadow: 0 1px 2px #000; pointer-events: none;  
   }  
 </style>  
 </head>  
 <body>  
   <canvas id="game"></canvas>  
-  <div id="hud">WASD to move</div>  
+  <div id="hud"></div>  
   <script type="module" src="src/main.js"></script>  
 </body>  
 </html>
