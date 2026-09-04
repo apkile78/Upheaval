@@ -1,4 +1,5 @@
 import { chunkRng, valueNoise2D } from "./rng.js";  
+import { loadDiff, saveDiff } from "./storage.js";
   
 export const CHUNK_SIZE = 16;  
 export const EMPTY = 0, FLOOR = 1, WALL = 2;  
