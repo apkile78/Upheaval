@@ -42,7 +42,8 @@ export function generateChunkTiles(seed, cx, cz) {
   // deterministically drop ONE stairs tile that links floor 0 -> floor 1,  
   // placed on an open ground tile adjacent to a building mass.  
   const rng = chunkRng(seed, cx, cz);  
-  for (let tries = 0; tries < 64; tries++) {  
+  let placed = 0;  
+  for (let tries = 0; tries < 256 && placed < 4; tries++) {  
     const lx = Math.floor(rng() * CHUNK_SIZE);  
     const lz = Math.floor(rng() * CHUNK_SIZE);  
     const i = lz * CHUNK_SIZE + lx;  
@@ -57,8 +58,8 @@ export function generateChunkTiles(seed, cx, cz) {
     if (!neigh.includes(WALL)) continue;  
     l0[i] = STAIRS;  
     l1[i] = FLOOR; // make sure you can stand at the top  
-    break;  
-  }  
+    placed++;  
+  }
   
   return layers;  
 }  
