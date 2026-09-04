@@ -152,30 +152,6 @@ const keys = {};
 addEventListener("keydown", (e) => { keys[e.code] = true; });  
 addEventListener("keyup", (e) => { keys[e.code] = false; });  
   
-// stairs (R = up, F = down) and wall-smash test key (G)  
-addEventListener("keydown", (e) => {  
-  const px = Math.floor(player.x), pz = Math.floor(player.z);  
-  
-  // find a stairs tile on the given level within the 3x3 around the player  
-  const findStairs = (level) => {  
-    for (let z = pz - 1; z <= pz + 1; z++)  
-      for (let x = px - 1; x <= px + 1; x++)  
-        if (world.getTile(x, z, level) === STAIRS) return [x, z];  
-    return null;  
-  };  
-  
-  if (e.code === "KeyR") {  
-    const s = findStairs(player.level);  
-    if (s && player.level < world.maxLevel && !world.isSolid(s[0], s[1], player.level + 1)) {  
-      player.level++;  
-    }  
-  }  
-  if (e.code === "KeyF") {  
-    if (player.level > 0 && findStairs(player.level - 1)) {  
-      player.level--;  
-    }  
-  }
-  
   if (e.code === "KeyG") {  
     const px = Math.floor(player.x), pz = Math.floor(player.z);  
     let best = null, bestD = Infinity;  
