@@ -138,7 +138,7 @@ export class World {
   
   // build geometry (floats: x,y,z, u,v, shade) for one layer of one chunk  
   buildLayerMeshData(c, level) {  
-    const floor = [], wall = [], stairs = [];  
+    const floor = [], wall = [], stairs = [], roof = [];  
     const tiles = c.tiles[level];  
     const baseX = c.cx * CHUNK_SIZE, baseZ = c.cz * CHUNK_SIZE;  
   
@@ -177,8 +177,8 @@ export class World {
         }  
   
         if (t === WALL) {  
-          // top face  
-          pushQuad(wall, [[x,1,z,0,0],[x+1,1,z,1,0],[x+1,1,z+1,1,1],[x,1,z+1,0,1]], 1.0);  
+          // top face -> separate roof mesh so it can be hidden on the current floor  
+          pushQuad(roof, [[x,1,z,0,0],[x+1,1,z,1,0],[x+1,1,z+1,1,1],[x,1,z+1,0,1]], 1.0);  
           // exposed side faces only (cull against solid neighbours in same layer)  
           const solid = (nx, nz) =>  
             this.isSolid(baseX + nx, baseZ + nz, level);  
@@ -197,6 +197,7 @@ export class World {
     return {  
       floorMesh: this.makeMesh(new Float32Array(floor)),  
       wallMesh: this.makeMesh(new Float32Array(wall)),  
+      roofMesh: this.makeMesh(new Float32Array(roof)),  
       stairsMesh: this.makeMesh(new Float32Array(stairs)),  
     };  
   }  
