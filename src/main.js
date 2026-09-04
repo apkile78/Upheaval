@@ -1,4 +1,4 @@
-import * as m4 from "./math/mat4.js";  
+hing is, in this game i want to be able to oint the vehicle import * as m4 from "./math/mat4.js";  
 import { World, CHUNK_SIZE, FLOOR, STAIRS } from "./world/world.js";  
 import { hashSeed } from "./world/rng.js";  
   
@@ -152,18 +152,6 @@ const keys = {};
 
 addEventListener("keydown", (e) => {  
   keys[e.code] = true;  
-  
-  if (e.code === "KeyG") {  
-    const px = Math.floor(player.x), pz = Math.floor(player.z);  
-    let best = null, bestD = Infinity;  
-    for (let z = pz - 1; z <= pz + 1; z++)  
-      for (let x = px - 1; x <= px + 1; x++)  
-        if (world.isSolid(x, z, player.level)) {  
-          const d = (x + 0.5 - player.x) ** 2 + (z + 0.5 - player.z) ** 2;  
-          if (d < bestD) { bestD = d; best = [x, z]; }  
-        }  
-    if (best) world.setTile(best[0], best[1], player.level, FLOOR);  
-  }  
 });  
 addEventListener("keyup", (e) => { keys[e.code] = false; });
 
