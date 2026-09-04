@@ -1,5 +1,5 @@
 import { chunkRng, valueNoise2D } from "./rng.js";  
-import { loadDiff, saveDiff } from "./storage.js";
+import { loadDiff, saveDiff } from "./storage.js";  
   
 export const CHUNK_SIZE = 16;  
 export const EMPTY = 0, FLOOR = 1, WALL = 2;  
@@ -66,7 +66,7 @@ export class World {
     this.seed = seed >>> 0;  
     this.gl = gl;  
     this.makeMesh = makeMesh;      // (Float32Array) => { vao, count }  
-    this.chunks = new Map();       // "cx,cz" -> { cx, cz, tiles, floorMesh, wallMesh }  
+    this.chunks = new Map();       // "cx,cz" -> chunk object  
   }  
   key(cx, cz) { return cx + "," + cz; }  
   
@@ -82,7 +82,7 @@ export class World {
         floorMesh: null, wallMesh: null,  
       };  
       this.chunks.set(k, c);  
-      // async: apply saved diff over the baseline when it resolves  
+      // async: apply saved diff over the baseline when it resolves (option A)  
       loadDiff(k).then((saved) => {  
         if (!saved) { c.diffLoaded = true; return; }  
         for (const idx in saved) c.tiles[idx] = saved[idx];  
@@ -103,6 +103,18 @@ export class World {
   }  
   isSolid(tx, tz) { return this.getTile(Math.floor(tx), Math.floor(tz)) === WALL; }  
   
+  setTile(tx, tz, value) {  
+    const cx = Math.floor(tx / CHUNK_SIZE), cz = Math.floor(tz / CHUNK_SIZE);  
+    const c = this.getChunk(cx, cz);  
+    const lx = tx - cx * CHUNK_SIZE, lz = tz - cz * CHUNK_SIZE;  
+    const idx = lz * CHUNK_SIZE + lx;  
+    c.tiles[idx] = value;  
+    c.diff[idx] = value;  
+    c.floorMesh = null;  // dirty -> re-baked by ensureMesh next update  
+    c.wallMesh = null;  
+    saveDiff(this.key(cx, cz), c.diff); // fire-and-forget persist  
+  }  
+  
   ensureMesh(c) {  
     if (c.floorMesh) return;  
     const { floorData, wallData } = buildChunkMeshData(this, c);  
@@ -110,15 +122,17 @@ export class World {
     c.wallMesh = this.makeMesh(wallData);  
   }  
   
-  // Load/mesh chunks in a radius; drop far ones. Call once per frame.  
+  // Load/mesh chunks in a radius; drop far ones (flushing diffs). Call once per frame.  
   update(px, pz, radius) {  
     const pcx = Math.floor(px / CHUNK_SIZE), pcz = Math.floor(pz / CHUNK_SIZE);  
     for (let dz = -radius; dz <= radius; dz++)  
       for (let dx = -radius; dx <= radius; dx++)  
         this.ensureMesh(this.getChunk(pcx + dx, pcz + dz));  
     for (const [k, c] of this.chunks)  
-      if (Math.abs(c.cx - pcx) > radius + 1 || Math.abs(c.cz - pcz) > radius + 1)  
+      if (Math.abs(c.cx - pcx) > radius + 1 || Math.abs(c.cz - pcz) > radius + 1) {  
+        if (Object.keys(c.diff).length) saveDiff(k, c.diff);  
         this.chunks.delete(k); // (later: also delete GL buffers here)  
+      }  
   }  
   
   loadedChunks(px, pz, radius) {  
