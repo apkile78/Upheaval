@@ -27,8 +27,8 @@ export function generateChunkTiles(seed, cx, cz) {
       const i = lz * CHUNK_SIZE + lx;  
   
       // ground floor: mostly walkable, blobby "building" masses from noise  
-      const n = valueNoise2D(seed, wx * 0.15, wz * 0.15);  
-      if (n > 0.62) {  
+      const n = valueNoise2D(seed, wx * 0.08, wz * 0.08);  
+      if (n > 0.72) {  
         l0[i] = WALL;  
         // second story sits on top of building mass, with sparser walls  
         const n2 = valueNoise2D(seed ^ 0x9e3779b9, wx * 0.2, wz * 0.2);  
@@ -43,7 +43,7 @@ export function generateChunkTiles(seed, cx, cz) {
   // placed on an open ground tile adjacent to a building mass.  
   const rng = chunkRng(seed, cx, cz);  
   let placed = 0;  
-  for (let tries = 0; tries < 256 && placed < 4; tries++) {  
+  for (let tries = 0; tries < 256 && placed < 1; tries++) {  
     const lx = Math.floor(rng() * CHUNK_SIZE);  
     const lz = Math.floor(rng() * CHUNK_SIZE);  
     const i = lz * CHUNK_SIZE + lx;  
