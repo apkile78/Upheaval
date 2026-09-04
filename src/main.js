@@ -255,3 +255,27 @@ function render() {
   const fwd = m4.norm(m4.sub(eye, center));  
   const right = m4.norm(m4.cross([0, 1, 0], fwd));  
   const up = m4.cross(fwd, right);
+  const w = 0.7, h = 1.2, px = player.x, py = baseY + 0.6, pz = player.z;  
+  const billboard = [  
+    right[0]*w, right[1]*w, right[2]*w, 0,  
+    up[0]*h,    up[1]*h,    up[2]*h,    0,  
+    fwd[0],     fwd[1],     fwd[2],     0,  
+    px,         py,         pz,         1,  
+  ];  
+  draw(quad, billboard, whiteTex, [0.9, 0.2, 0.7]);  
+  
+  // HUD  
+  hud.textContent = `seed: ${worldSeed}  floor: ${player.level}  (WASD move, R/F stairs, G smash)`;  
+}  
+  
+// ---------- fixed-timestep loop ----------  
+function frame(now) {  
+  let dt = (now - last) / 1000; last = now;  
+  if (dt > 0.25) dt = 0.25;   // clamp after tab-out so we don't spiral  
+  acc += dt * timeScale;  
+  while (acc >= STEP) { update(STEP); acc -= STEP; }  
+  render();  
+  requestAnimationFrame(frame);  
+}  
+requestAnimationFrame(frame);  
+console.log("alive");
