@@ -74,11 +74,27 @@ export class World {
     const k = this.key(cx, cz);  
     let c = this.chunks.get(k);  
     if (!c) {  
-      c = { cx, cz, tiles: generateChunkTiles(this.seed, cx, cz), floorMesh: null, wallMesh: null };  
+      c = {  
+        cx, cz,  
+        tiles: generateChunkTiles(this.seed, cx, cz),  
+        diff: {},           // localIndex -> tileValue, player changes only  
+        diffLoaded: false,  
+        floorMesh: null, wallMesh: null,  
+      };  
       this.chunks.set(k, c);  
+      // async: apply saved diff over the baseline when it resolves  
+      loadDiff(k).then((saved) => {  
+        if (!saved) { c.diffLoaded = true; return; }  
+        for (const idx in saved) c.tiles[idx] = saved[idx];  
+        c.diff = saved;  
+        c.diffLoaded = true;  
+        c.floorMesh = null;  // force re-bake with the applied diff  
+        c.wallMesh = null;  
+      });  
     }  
     return c;  
   }  
+  
   getTile(tx, tz) {  
     const cx = Math.floor(tx / CHUNK_SIZE), cz = Math.floor(tz / CHUNK_SIZE);  
     const c = this.getChunk(cx, cz);  
