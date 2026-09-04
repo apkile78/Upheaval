@@ -149,8 +149,9 @@ for (let i = 0; i < 4096 && collides(player.x, player.z, player.level, player.r)
   
 // ---------- input ----------  
 const keys = {};  
-addEventListener("keydown", (e) => { keys[e.code] = true; });  
-addEventListener("keyup", (e) => { keys[e.code] = false; });  
+
+addEventListener("keydown", (e) => {  
+  keys[e.code] = true;  
   
   if (e.code === "KeyG") {  
     const px = Math.floor(player.x), pz = Math.floor(player.z);  
@@ -164,7 +165,8 @@ addEventListener("keyup", (e) => { keys[e.code] = false; });
     if (best) world.setTile(best[0], best[1], player.level, FLOOR);  
   }  
 });  
-  
+addEventListener("keyup", (e) => { keys[e.code] = false; });
+
 // ---------- fixed-timestep loop ----------  
 const STEP = 1 / 60;  
 let timeScale = 1;   // future: speed up crafting/sleeping  
