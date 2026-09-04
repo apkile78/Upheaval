@@ -263,10 +263,8 @@ function render() {
     up[0]*h,    up[1]*h,    up[2]*h,    0,  
     fwd[0],     fwd[1],     fwd[2],     0,  
     px,         py,         pz,         1,  
-  ];  
-  gl.depthFunc(gl.ALWAYS);                              // player always draws on top  
-  draw(quad, billboard, whiteTex, [0.9, 0.2, 0.7]);  
-  gl.depthFunc(gl.LESS);                                // restore default for next frame  
+  ];                             
+  draw(quad, billboard, whiteTex, [0.9, 0.2, 0.7]);
   
   // HUD  
   hud.textContent = `seed: ${worldSeed}  floor: ${player.level}  (WASD move, R/F stairs, G smash)`;  
