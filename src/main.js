@@ -248,8 +248,9 @@ function render() {
       const m = c.meshes[L];  
       if (!m) continue;  
       draw(m.floorMesh,  model, floorTex, [dim, dim, dim]);  
-      draw(m.wallMesh,   model, wallTex,  [dim, dim, dim]);  
-      draw(m.stairsMesh, model, whiteTex, [dim, dim * 0.9, 0.2]); // yellow = stairs  
+          draw(m.wallMesh,   model, wallTex,  [dim, dim, dim]);  
+          if (L < player.level) draw(m.roofMesh, model, wallTex, [dim, dim, dim]); // hide roof of current floor  
+          draw(m.stairsMesh, model, whiteTex, [dim, dim * 0.9, 0.2]); // yellow = stairs  
     }  
   }  
   
