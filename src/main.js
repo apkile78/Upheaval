@@ -1,5 +1,5 @@
 import * as m4 from "./math/mat4.js";  
-import { World, CHUNK_SIZE, FLOOR } from "./world/world.js";  
+import { World, CHUNK_SIZE, FLOOR, STAIRS, N_LAYERS } from "./world/world.js";
 import { hashSeed } from "./world/rng.js";  
   
 // ---------- WebGL2 context ----------  
