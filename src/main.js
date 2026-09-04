@@ -214,17 +214,21 @@ function render() {
   const lo = Math.max(0, player.level - BAND_BELOW);  
   for (let L = lo; L <= player.level; L++) {  
     const yoff = L * LAYER_H;  
-    const model = [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,yoff,0,1]; // translate on Y  
     const dim = Math.pow(0.55, player.level - L);          // lower floors darker  
     for (const c of chunks) {  
       const m = c.meshes[L];  
       if (!m) continue;  
+      // per-chunk world offset: meshes are baked in LOCAL coords, so place  
+      // each chunk at its grid position (X/Z) plus the layer height (Y)  
+      const xoff = c.cx * CHUNK_SIZE;  
+      const zoff = c.cz * CHUNK_SIZE;  
+      const model = [1,0,0,0, 0,1,0,0, 0,0,1,0, xoff, yoff, zoff, 1];  
       draw(m.floorMesh,  model, floorTex, [dim, dim, dim]);  
-          draw(m.wallMesh,   model, wallTex,  [dim, dim, dim]);  
-          if (L < player.level) draw(m.roofMesh, model, wallTex, [dim, dim, dim]); // hide roof of current floor  
-          draw(m.stairsMesh, model, whiteTex, [dim, dim * 0.9, 0.2]); // yellow = stairs  
+      draw(m.wallMesh,   model, wallTex,  [dim, dim, dim]);  
+      if (L < player.level) draw(m.roofMesh, model, wallTex, [dim, dim, dim]); // hide roof of current floor  
+      draw(m.stairsMesh, model, whiteTex, [dim, dim * 0.9, 0.2]); // yellow = stairs  
     }  
-  }  
+  }
   
   // player billboard (always faces the fixed camera)  
   const fwd = m4.norm(m4.sub(eye, center));  
