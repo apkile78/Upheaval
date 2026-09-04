@@ -200,10 +200,12 @@ function update(dt) {
     dx /= len; dz /= len;  
     const step = player.speed * dt;  
     // per-axis AABB-vs-tile collision so we slide along walls  
-    const nx = player.x + dx * step;  
+  const nx = player.x + dx * step;  
     if (!collides(nx, player.z, player.level, player.r)) player.x = nx;  
+    else console.log("blocked X", Math.floor(nx), Math.floor(player.z), "L", player.level);  
     const nz = player.z + dz * step;  
     if (!collides(player.x, nz, player.level, player.r)) player.z = nz;  
+    else console.log("blocked Z", Math.floor(player.x), Math.floor(nz), "L", player.level);  
   }  
 }  
   
@@ -262,7 +264,9 @@ function render() {
     fwd[0],     fwd[1],     fwd[2],     0,  
     px,         py,         pz,         1,  
   ];  
+  gl.depthFunc(gl.ALWAYS);                              // player always draws on top  
   draw(quad, billboard, whiteTex, [0.9, 0.2, 0.7]);  
+  gl.depthFunc(gl.LESS);                                // restore default for next frame  
   
   // HUD  
   hud.textContent = `seed: ${worldSeed}  floor: ${player.level}  (WASD move, R/F stairs, G smash)`;  
