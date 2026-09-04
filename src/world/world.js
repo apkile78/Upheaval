@@ -1,168 +1,225 @@
 import { chunkRng, valueNoise2D } from "./rng.js";  
 import { loadDiff, saveDiff } from "./storage.js";  
   
+// ---------- constants ----------  
 export const CHUNK_SIZE = 16;  
-export const N_LAYERS = 8;                 // capped vertical stack (option A)  
-export const EMPTY = 0, FLOOR = 1, WALL = 2, STAIRS = 3;  
+export const N_LAYERS = 8;             // capped vertical stack (milestone 6, option A)  
+const AREA = CHUNK_SIZE * CHUNK_SIZE;  
   
-// ---- deterministic generation: returns N_LAYERS flat Uint8Arrays ----  
-function generateChunkLayers(seed, cx, cz) {  
+// tile values  
+export const AIR = 0;  
+export const FLOOR = 1;  
+export const WALL = 2;  
+export const STAIRS = 3;  
+  
+// ---------- generation ----------  
+// Returns an array of N_LAYERS Uint8Arrays (one 2D layer each).  
+export function generateChunkTiles(seed, cx, cz) {  
   const layers = [];  
-  for (let z = 0; z < N_LAYERS; z++) layers.push(new Uint8Array(CHUNK_SIZE * CHUNK_SIZE));  
-  const rng = chunkRng(seed, cx, cz);  
-  const scale = 0.12;  
-  let stairPlaced = false;  
+  for (let L = 0; L < N_LAYERS; L++) layers.push(new Uint8Array(AREA)); // AIR=0  
+  
+  const l0 = layers[0], l1 = layers[1];  
+  
   for (let lz = 0; lz < CHUNK_SIZE; lz++) {  
     for (let lx = 0; lx < CHUNK_SIZE; lx++) {  
-      const wx = cx * CHUNK_SIZE + lx, wz = cz * CHUNK_SIZE + lz;  
-      const n = valueNoise2D(seed, wx * scale, wz * scale);  
-      const idx = lz * CHUNK_SIZE + lx;  
-      // ground floor (layer 0): same blobby buildings as before  
-      let ground = n > 0.62 ? WALL : FLOOR;  
-      if (ground === FLOOR && rng() < 0.02) ground = WALL;  
-      layers[0][idx] = ground;  
-      // second floor (layer 1): only over the interior of big building masses  
-      if (n > 0.72) layers[1][idx] = WALL;  
-      else if (n > 0.62) layers[1][idx] = FLOOR;  
-      // one stairway per chunk connecting ground -> second floor  
-      if (!stairPlaced && ground === FLOOR && layers[1][idx] === FLOOR) {  
-        layers[0][idx] = STAIRS;  
-        stairPlaced = true;  
+      const wx = cx * CHUNK_SIZE + lx;  
+      const wz = cz * CHUNK_SIZE + lz;  
+      const i = lz * CHUNK_SIZE + lx;  
+  
+      // ground floor: mostly walkable, blobby "building" masses from noise  
+      const n = valueNoise2D(seed, wx * 0.15, wz * 0.15);  
+      if (n > 0.62) {  
+        l0[i] = WALL;  
+        // second story sits on top of building mass, with sparser walls  
+        const n2 = valueNoise2D(seed ^ 0x9e3779b9, wx * 0.2, wz * 0.2);  
+        l1[i] = (n2 > 0.7) ? WALL : FLOOR;  
+      } else {  
+        l0[i] = FLOOR;  
       }  
     }  
   }  
+  
+  // deterministically drop ONE stairs tile that links floor 0 -> floor 1,  
+  // placed on an open ground tile adjacent to a building mass.  
+  const rng = chunkRng(seed, cx, cz);  
+  for (let tries = 0; tries < 64; tries++) {  
+    const lx = Math.floor(rng() * CHUNK_SIZE);  
+    const lz = Math.floor(rng() * CHUNK_SIZE);  
+    const i = lz * CHUNK_SIZE + lx;  
+    if (l0[i] !== FLOOR) continue;  
+    // needs a building neighbour so the second story above is real  
+    const neigh = [  
+      lx > 0 ? l0[i - 1] : AIR,  
+      lx < CHUNK_SIZE - 1 ? l0[i + 1] : AIR,  
+      lz > 0 ? l0[i - CHUNK_SIZE] : AIR,  
+      lz < CHUNK_SIZE - 1 ? l0[i + CHUNK_SIZE] : AIR,  
+    ];  
+    if (!neigh.includes(WALL)) continue;  
+    l0[i] = STAIRS;  
+    l1[i] = FLOOR; // make sure you can stand at the top  
+    break;  
+  }  
+  
   return layers;  
 }  
   
-// ---- mesh helpers (vertex = pos(3), uv(2), shade(1) = stride 6) ----  
-const TOP = 0.85, SIDE = 0.65;  
-  
-// quad from a corner + two edge vectors -> two triangles  
-function pushQuad(a, x, y, z, ux, uy, uz, vx, vy, vz, shade) {  
-  const p = (px, py, pz, u, v) => a.push(px, py, pz, u, v, shade);  
-  p(x, y, z, 0, 0);  
-  p(x + ux, y + uy, z + uz, 1, 0);  
-  p(x + ux + vx, y + uy + vy, z + uz + vz, 1, 1);  
-  p(x, y, z, 0, 0);  
-  p(x + ux + vx, y + uy + vy, z + uz + vz, 1, 1);  
-  p(x + vx, y + vy, z + vz, 0, 1);  
-}  
-  
-// build geometry for ONE layer of a chunk (exposed-face culling within that layer)  
-function buildLayerMeshData(world, c, level) {  
-  const floorData = [], wallData = [], stairsData = [];  
-  const baseX = c.cx * CHUNK_SIZE, baseZ = c.cz * CHUNK_SIZE;  
-  for (let lz = 0; lz < CHUNK_SIZE; lz++) {  
-    for (let lx = 0; lx < CHUNK_SIZE; lx++) {  
-      const wx = baseX + lx, wz = baseZ + lz;  
-      const t = c.layers[level][lz * CHUNK_SIZE + lx];  
-      if (t === EMPTY) continue;  
-      if (t === WALL) {  
-        pushQuad(wallData, lx, 1, lz, 1, 0, 0, 0, 0, 1, TOP);         // top  
-        if (world.getTile(wx - 1, wz, level) !== WALL)  
-          pushQuad(wallData, lx, 0, lz, 0, 0, 1, 0, 1, 0, SIDE);  
-        if (world.getTile(wx + 1, wz, level) !== WALL)  
-          pushQuad(wallData, lx + 1, 0, lz + 1, 0, 0, -1, 0, 1, 0, SIDE);  
-        if (world.getTile(wx, wz - 1, level) !== WALL)  
-          pushQuad(wallData, lx + 1, 0, lz, -1, 0, 0, 0, 1, 0, SIDE);  
-        if (world.getTile(wx, wz + 1, level) !== WALL)  
-          pushQuad(wallData, lx, 0, lz + 1, 1, 0, 0, 0, 1, 0, SIDE);  
-      } else if (t === STAIRS) {  
-        pushQuad(stairsData, lx, 0.06, lz, 1, 0, 0, 0, 0, 1, TOP);  
-      } else { // FLOOR  
-        pushQuad(floorData, lx, 0.02, lz, 1, 0, 0, 0, 0, 1, TOP);  
-      }  
-    }  
-  }  
-  return {  
-    floorData: new Float32Array(floorData),  
-    wallData: new Float32Array(wallData),  
-    stairsData: new Float32Array(stairsData),  
-  };  
-}  
-  
+// ---------- world ----------  
 export class World {  
   constructor(seed, gl, makeMesh) {  
-    this.seed = seed;  
+    this.seed = seed >>> 0;  
     this.gl = gl;  
-    this.makeMesh = makeMesh;  
-    this.chunks = new Map();  
+    this.makeMesh = makeMesh;      // (Float32Array) -> { vao, count }  
+    this.chunks = new Map();       // "cx,cz" -> chunk  
   }  
+  
   key(cx, cz) { return cx + "," + cz; }  
+  get maxLevel() { return N_LAYERS - 1; }  
   
   getChunk(cx, cz) {  
     const k = this.key(cx, cz);  
     let c = this.chunks.get(k);  
-    if (!c) {  
-      c = {  
-        cx, cz,  
-        layers: generateChunkLayers(this.seed, cx, cz),  
-        diff: {},                              // z-encoded localIndex -> tileValue  
-        diffLoaded: false,  
-        meshes: new Array(N_LAYERS).fill(null), // per-layer {floorMesh,wallMesh,stairsMesh}  
-      };  
-      this.chunks.set(k, c);  
-      // async: apply saved diff over the baseline when it resolves (option A)  
-      loadDiff(k).then((saved) => {  
-        if (saved) {  
-          for (const idx in saved) {  
-            const i = +idx;  
-            const z = Math.floor(i / (CHUNK_SIZE * CHUNK_SIZE));  
-            c.layers[z][i - z * CHUNK_SIZE * CHUNK_SIZE] = saved[idx];  
-          }  
-          c.diff = saved;  
-          c.meshes = new Array(N_LAYERS).fill(null); // force re-bake with diff applied  
+    if (c) return c;  
+  
+    c = {  
+      cx, cz,  
+      tiles: generateChunkTiles(this.seed, cx, cz), // array[L] of Uint8Array  
+      diff: {},                                     // encodedIndex -> tileValue  
+      diffLoaded: false,  
+      meshes: new Array(N_LAYERS).fill(null),       // meshes[L] = {floorMesh,wallMesh,stairsMesh}  
+    };  
+    this.chunks.set(k, c);  
+  
+    // option A: baseline is live now, apply saved diff when it resolves  
+    loadDiff(k).then((saved) => {  
+      if (saved) {  
+        for (const idx in saved) {  
+          const enc = +idx;  
+          const L = Math.floor(enc / AREA);  
+          const local = enc % AREA;  
+          if (c.tiles[L]) c.tiles[L][local] = saved[idx];  
         }  
-        c.diffLoaded = true;  
-      });  
-    }  
+        c.diff = saved;  
+        c.meshes.fill(null); // force re-bake with the applied diff  
+      }  
+      c.diffLoaded = true;  
+    });  
+  
     return c;  
   }  
   
+  // encode (level, local) into the single per-chunk diff key space  
+  encode(level, local) { return level * AREA + local; }  
+  
   getTile(tx, tz, level) {  
-    if (level < 0 || level >= N_LAYERS) return EMPTY;  
+    if (level < 0 || level >= N_LAYERS) return AIR;  
     const cx = Math.floor(tx / CHUNK_SIZE), cz = Math.floor(tz / CHUNK_SIZE);  
     const c = this.getChunk(cx, cz);  
     const lx = tx - cx * CHUNK_SIZE, lz = tz - cz * CHUNK_SIZE;  
-    return c.layers[level][lz * CHUNK_SIZE + lx];  
+    return c.tiles[level][lz * CHUNK_SIZE + lx];  
   }  
   
-  isSolid(tx, tz, level) { return this.getTile(tx, tz, level) === WALL; }  
+  isSolid(tx, tz, level) {  
+    return this.getTile(tx, tz, level) === WALL;  
+  }  
   
   setTile(tx, tz, level, value) {  
+    if (level < 0 || level >= N_LAYERS) return;  
     const cx = Math.floor(tx / CHUNK_SIZE), cz = Math.floor(tz / CHUNK_SIZE);  
     const c = this.getChunk(cx, cz);  
     const lx = tx - cx * CHUNK_SIZE, lz = tz - cz * CHUNK_SIZE;  
     const local = lz * CHUNK_SIZE + lx;  
-    const idx = level * CHUNK_SIZE * CHUNK_SIZE + local;  
-    c.layers[level][local] = value;  
-    c.diff[idx] = value;  
-    c.meshes[level] = null;              // re-bake only the changed layer  
-    saveDiff(this.key(cx, cz), c.diff);  // fire-and-forget persist  
+  
+    c.tiles[level][local] = value;  
+    c.diff[this.encode(level, local)] = value;  
+    c.meshes[level] = null;                 // dirty -> re-bake this layer  
+    saveDiff(this.key(cx, cz), c.diff);     // async fire-and-forget  
+  }  
+  
+  // build geometry (floats: x,y,z, u,v, shade) for one layer of one chunk  
+  buildLayerMeshData(c, level) {  
+    const floor = [], wall = [], stairs = [];  
+    const tiles = c.tiles[level];  
+    const baseX = c.cx * CHUNK_SIZE, baseZ = c.cz * CHUNK_SIZE;  
+  
+    const pushQuad = (arr, verts, shade) => {  
+      // verts: [ [x,y,z,u,v] x4 ], emit two triangles  
+      const idx = [0, 1, 2, 0, 2, 3];  
+      for (const j of idx) {  
+        const v = verts[j];  
+        arr.push(v[0], v[1], v[2], v[3], v[4], shade);  
+      }  
+    };  
+  
+    for (let lz = 0; lz < CHUNK_SIZE; lz++) {  
+      for (let lx = 0; lx < CHUNK_SIZE; lx++) {  
+        const t = tiles[lz * CHUNK_SIZE + lx];  
+        const x = lx, z = lz; // local coords; chunk world-offset handled below  
+  
+        if (t === FLOOR || t === STAIRS) {  
+          // flat floor quad slightly above 0 to avoid z-fighting  
+          pushQuad(floor, [  
+            [x,     0.02, z    , 0, 0],  
+            [x + 1, 0.02, z    , 1, 0],  
+            [x + 1, 0.02, z + 1, 1, 1],  
+            [x,     0.02, z + 1, 0, 1],  
+          ], 1.0);  
+        }  
+  
+        if (t === STAIRS) {  
+          // short marker box (0..0.5) so stairs are visible; tinted yellow in draw()  
+          const y1 = 0.5;  
+          pushQuad(stairs, [[x,y1,z,0,0],[x+1,y1,z,1,0],[x+1,y1,z+1,1,1],[x,y1,z+1,0,1]], 1.0);  
+          pushQuad(stairs, [[x,0,z,0,0],[x+1,0,z,1,0],[x+1,y1,z,1,1],[x,y1,z,0,1]], 0.7);  
+          pushQuad(stairs, [[x,0,z+1,0,0],[x+1,0,z+1,1,0],[x+1,y1,z+1,1,1],[x,y1,z+1,0,1]], 0.7);  
+          pushQuad(stairs, [[x,0,z,0,0],[x,0,z+1,1,0],[x,y1,z+1,1,1],[x,y1,z,0,1]], 0.6);  
+          pushQuad(stairs, [[x+1,0,z,0,0],[x+1,0,z+1,1,0],[x+1,y1,z+1,1,1],[x+1,y1,z,0,1]], 0.6);  
+        }  
+  
+        if (t === WALL) {  
+          // top face  
+          pushQuad(wall, [[x,1,z,0,0],[x+1,1,z,1,0],[x+1,1,z+1,1,1],[x,1,z+1,0,1]], 1.0);  
+          // exposed side faces only (cull against solid neighbours in same layer)  
+          const solid = (nx, nz) =>  
+            this.isSolid(baseX + nx, baseZ + nz, level);  
+          if (!solid(lx, lz - 1)) // north  
+            pushQuad(wall, [[x,0,z,0,0],[x+1,0,z,1,0],[x+1,1,z,1,1],[x,1,z,0,1]], 0.7);  
+          if (!solid(lx, lz + 1)) // south  
+            pushQuad(wall, [[x,0,z+1,0,0],[x+1,0,z+1,1,0],[x+1,1,z+1,1,1],[x,1,z+1,0,1]], 0.7);  
+          if (!solid(lx - 1, lz)) // west  
+            pushQuad(wall, [[x,0,z,0,0],[x,0,z+1,1,0],[x,1,z+1,1,1],[x,1,z,0,1]], 0.6);  
+          if (!solid(lx + 1, lz)) // east  
+            pushQuad(wall, [[x+1,0,z,0,0],[x+1,0,z+1,1,0],[x+1,1,z+1,1,1],[x+1,1,z,0,1]], 0.6);  
+        }  
+      }  
+    }  
+  
+    return {  
+      floorMesh: this.makeMesh(new Float32Array(floor)),  
+      wallMesh: this.makeMesh(new Float32Array(wall)),  
+      stairsMesh: this.makeMesh(new Float32Array(stairs)),  
+    };  
   }  
   
   ensureMesh(c) {  
-    for (let z = 0; z < N_LAYERS; z++) {  
-      if (c.meshes[z]) continue;  
-      const { floorData, wallData, stairsData } = buildLayerMeshData(this, c, z);  
-      c.meshes[z] = {  
-        floorMesh: this.makeMesh(floorData),  
-        wallMesh: this.makeMesh(wallData),  
-        stairsMesh: this.makeMesh(stairsData),  
-      };  
+    for (let L = 0; L < N_LAYERS; L++) {  
+      if (!c.meshes[L]) c.meshes[L] = this.buildLayerMeshData(c, L);  
     }  
   }  
   
+  // load/mesh chunks in radius, flush+unload the rest  
   update(px, pz, radius) {  
     const pcx = Math.floor(px / CHUNK_SIZE), pcz = Math.floor(pz / CHUNK_SIZE);  
     for (let dz = -radius; dz <= radius; dz++)  
-      for (let dx = -radius; dx <= radius; dx++)  
-        this.ensureMesh(this.getChunk(pcx + dx, pcz + dz));  
-    for (const [k, c] of this.chunks)  
-      if (Math.abs(c.cx - pcx) > radius + 1 || Math.abs(c.cz - pcz) > radius + 1) {  
-        if (Object.keys(c.diff).length) saveDiff(k, c.diff);  
-        this.chunks.delete(k); // (later: also delete GL buffers here)  
+      for (let dx = -radius; dx <= radius; dx++) {  
+        const c = this.getChunk(pcx + dx, pcz + dz);  
+        this.ensureMesh(c);  
       }  
+    for (const [k, c] of this.chunks) {  
+      if (Math.abs(c.cx - pcx) > radius + 1 || Math.abs(c.cz - pcz) > radius + 1) {  
+        if (Object.keys(c.diff).length) saveDiff(k, c.diff); // flush before drop  
+        this.chunks.delete(k);  
+      }  
+    }  
   }  
   
   loadedChunks(px, pz, radius) {  
