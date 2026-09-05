@@ -231,10 +231,14 @@ function render() {
   const horiz = camDist * Math.cos(camPitch);   // horizontal reach  
   const vert  = camDist * Math.sin(camPitch);   // height above center  
   const eye = [  
-  center[0] + horiz * Math.sin(camYaw),  
-  center[1] + vert,  
-  center[2] + horiz * Math.cos(camYaw),  
-];
+    center[0] + horiz * Math.sin(camYaw),  
+    center[1] + vert,  
+    center[2] + horiz * Math.cos(camYaw),  
+  ];  
+  
+  const proj = m4.perspective(Math.PI / 4, canvas.width / canvas.height, 0.1, 100);  
+  const view = m4.lookAt(eye, center, [0, 1, 0]);  
+  gl.uniformMatrix4fv(U.viewProj, false, new Float32Array(m4.multiply(proj, view)));
   
   // stream + draw a depth band (current floor + a couple below, dimmed)  
   world.update(player.x, player.z, RADIUS);  
