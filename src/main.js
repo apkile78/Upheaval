@@ -16,24 +16,41 @@ uniform mat4 u_viewProj;
 uniform mat4 u_model;  
 out vec2 v_uv;  
 out float v_shade;  
+out vec3 v_world;  
 void main() {  
   v_uv = a_uv;  
   v_shade = a_shade;  
-  gl_Position = u_viewProj * u_model * vec4(a_pos, 1.0);  
-}`;  
+  vec4 world = u_model * vec4(a_pos, 1.0);  
+  v_world = world.xyz;  
+  gl_Position = u_viewProj * world;  
+}`;
   
 const FRAG = `#version 300 es  
 precision mediump float;  
 in vec2 v_uv;  
 in float v_shade;  
+in vec3 v_world;  
 uniform sampler2D u_tex;  
 uniform vec3 u_tint;  
+uniform float u_cutout;   // 1.0 for walls/roofs, 0.0 otherwise  
+uniform vec3 u_eye;  
+uniform vec3 u_target;    // player head position  
 out vec4 outColor;  
 void main() {  
   vec4 t = texture(u_tex, v_uv);  
   if (t.a < 0.5) discard;                 // billboard/sprite cutout  
+  if (u_cutout > 0.5) {  
+    vec3 ab = u_target - u_eye;  
+    float k = clamp(dot(v_world - u_eye, ab) / dot(ab, ab), 0.0, 1.0);  
+    vec3 closest = u_eye + k * ab;  
+    // only fade fragments in FRONT of the player and near the eye->player line  
+    if (k < 0.95 && distance(v_world, closest) < 1.1) {  
+      ivec2 p = ivec2(gl_FragCoord.xy);  
+      if (((p.x + p.y) & 1) == 0) discard;   // 50% checkerboard see-through  
+    }  
+  }  
   outColor = vec4(t.rgb * u_tint * v_shade, 1.0);  
-}`;  
+}`;
   
 function compile(type, src) {  
   const s = gl.createShader(type);  
@@ -43,6 +60,17 @@ function compile(type, src) {
     throw new Error(gl.getShaderInfoLog(s));  
   return s;  
 }  
+
+const U = {  
+  viewProj: gl.getUniformLocation(prog, "u_viewProj"),  
+  model: gl.getUniformLocation(prog, "u_model"),  
+  tint: gl.getUniformLocation(prog, "u_tint"),  
+  tex: gl.getUniformLocation(prog, "u_tex"),  
+  cutout: gl.getUniformLocation(prog, "u_cutout"),  
+  eye: gl.getUniformLocation(prog, "u_eye"),  
+  target: gl.getUniformLocation(prog, "u_target"),  
+};
+
 function makeProgram(vs, fs) {  
   const p = gl.createProgram();  
   gl.attachShader(p, compile(gl.VERTEX_SHADER, vs));  
@@ -117,14 +145,15 @@ const quad = makeMesh(new Float32Array([
   -0.5,  0.5, 0, 0, 0, 1,  
 ]));  
   
-function draw(mesh, model, tex, tint) {  
+function draw(mesh, model, tex, tint, cutout = 0) {  
   if (!mesh || !mesh.count) return;  
   gl.bindVertexArray(mesh.vao);  
   gl.uniformMatrix4fv(U.model, false, new Float32Array(model));  
   gl.uniform3fv(U.tint, tint);  
+  gl.uniform1f(U.cutout, cutout);  
   gl.bindTexture(gl.TEXTURE_2D, tex);  
   gl.drawArrays(gl.TRIANGLES, 0, mesh.count);  
-}  
+}
   
 // ---------- world + player ----------  
 const worldSeed = hashSeed(new URLSearchParams(location.search).get("seed"));  
@@ -222,6 +251,8 @@ function render() {
   gl.useProgram(prog);  
   gl.activeTexture(gl.TEXTURE0);  
   gl.uniform1i(U.tex, 0);  
+  gl.uniform3fv(U.eye, new Float32Array(eye));  
+  gl.uniform3fv(U.target, new Float32Array([player.x, baseY + 1.0, player.z]));
   
   // camera
 
@@ -256,9 +287,9 @@ function render() {
       const zoff = c.cz * CHUNK_SIZE;  
       const model = [1,0,0,0, 0,1,0,0, 0,0,1,0, xoff, yoff, zoff, 1];  
       draw(m.floorMesh,  model, floorTex, [dim, dim, dim]);  
-      draw(m.wallMesh,   model, wallTex,  [dim, dim, dim]);  
-      if (L < player.level) draw(m.roofMesh, model, wallTex, [dim, dim, dim]); // hide roof of current floor  
-      draw(m.stairsMesh, model, whiteTex, [dim, dim * 0.9, 0.2]); // yellow = stairs  
+      draw(m.wallMesh,   model, wallTex,  [dim, dim, dim], 1);  
+      if (L < player.level) draw(m.roofMesh, model, wallTex, [dim, dim, dim], 1);  
+      draw(m.stairsMesh, model, whiteTex, [dim, dim * 0.9, 0.2]);  
     }  
   }
   
