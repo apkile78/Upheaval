@@ -2,7 +2,7 @@ import * as m4 from "./math/mat4.js";
 import { CHUNK_SIZE } from "./world/world.js";  
 import { beginFrame, setViewProj, draw, quad, floorTex, wallTex, whiteTex } from "./gl/renderer.js";  
 import { player, world, collides, worldSeed, inventory } from "./player.js";  
-import { entities, spawnItem, spawnMob, spawnFollower, updateEntities } from "./entities.js";  
+import { entities, spawnItem, spawnMob, spawnFollower, attack, updateEntities, loadData } from "./entities.js";
 import { cameraEye } from "./camera.js";  
 import { keys, invOpen } from "./input.js";  
   
@@ -132,5 +132,5 @@ function frame(now) {
   render();  
   requestAnimationFrame(frame);  
 }  
-requestAnimationFrame(frame);  
+loadData().then(() => requestAnimationFrame(frame));  
 console.log("alive");
