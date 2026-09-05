@@ -146,7 +146,7 @@ for (let i = 0; i < 4096 && collides(player.x, player.z, player.level, player.r)
   player.x += 1;  
   if (player.x > 64) { player.x = 0.5; player.z += 1; }  
 }  
-
+  
 // ---------- entities ----------  
 // every entity has: kind, x, z, level, and kind-specific fields.  
 // items carry an itemId string so they slot into a JSON registry later with no refactor.  
@@ -154,11 +154,16 @@ const entities = [];
 function spawnItem(x, z, level, itemId) {  
   entities.push({ kind: "item", x, z, level, itemId, r: 0.25 });  
 }  
+function spawnMob(x, z, level, mobId) {  
+  entities.push({ kind: "mob", x, z, level, mobId, r: 0.3, hp: 10, speed: 1.5 });  
+}  
   
 const inventory = [];   // array of itemId strings for now  
   
 // drop one test item two tiles in front of spawn so there's something to pick up  
-spawnItem(player.x + 2, player.z, player.level, "scrap");
+spawnItem(player.x + 2, player.z, player.level, "scrap");  
+// spawn one test zombie a few tiles away so there's something that moves  
+spawnMob(player.x + 5, player.z + 3, player.level, "zombie");  
   
 // ---------- camera (orbit) ----------  
 let camYaw = Math.PI / 4;   // horizontal angle  
@@ -203,7 +208,7 @@ function update(dt) {
   if (keys["KeyS"] || keys["ArrowDown"])  dz += 1;  
   if (keys["KeyA"] || keys["ArrowLeft"])  dx -= 1;  
   if (keys["KeyD"] || keys["ArrowRight"]) dx += 1;  
-
+  
   // pickup: walk over an item on your floor to collect it  
   for (let i = entities.length - 1; i >= 0; i--) {  
     const e = entities[i];  
@@ -213,7 +218,22 @@ function update(dt) {
       inventory.push(e.itemId);  
       entities.splice(i, 1);  
     }  
-  }
+  }  
+  
+  // mobs: chase the player on the same floor (per-axis collision so they slide on walls)  
+  for (const e of entities) {  
+    if (e.kind !== "mob" || e.level !== player.level) continue;  
+    let mx = player.x - e.x, mz = player.z - e.z;  
+    const md = Math.hypot(mx, mz);  
+    if (md > 0.001) {  
+      mx /= md; mz /= md;  
+      const mstep = e.speed * dt;  
+      const nx = e.x + mx * mstep;  
+      if (!collides(nx, e.z, e.level, e.r)) e.x = nx;  
+      const nz = e.z + mz * mstep;  
+      if (!collides(e.x, nz, e.level, e.r)) e.z = nz;  
+    }  
+  }  
   
   if (dx || dz) {  
     const len = Math.hypot(dx, dz);  
@@ -280,26 +300,30 @@ function render() {
       draw(m.stairsMesh, model, whiteTex, [dim, dim * 0.9, 0.2]); // yellow = stairs  
     }  
   }  
-
+  
   const fwd = m4.norm(m4.sub(eye, center));  
   const right = m4.norm(m4.cross([0, 1, 0], fwd));  
-  const up = m4.cross(fwd, right);
+  const up = m4.cross(fwd, right);  
   
-  // draw world entities (items etc.) as camera-facing billboards  
+  // draw world entities (items, mobs) as camera-facing billboards  
   for (const ent of entities) {  
     if (ent.level !== player.level) continue;  
-    const ew = 0.4, eh = 0.4;  
-    const ey = ent.level * LAYER_H + 0.25;  
+    // mobs are bigger than items, and tinted differently by kind  
+    const isMob = ent.kind === "mob";  
+    const ew = isMob ? 0.7 : 0.4;  
+    const eh = isMob ? 1.1 : 0.4;  
+    const ey = ent.level * LAYER_H + (isMob ? 0.55 : 0.25);  
+    const tint = isMob ? [0.3, 0.8, 0.3] : [0.9, 0.85, 0.2]; // green mob / yellow item  
     const bb = [  
       right[0]*ew, right[1]*ew, right[2]*ew, 0,  
       up[0]*eh,    up[1]*eh,    up[2]*eh,    0,  
       fwd[0],      fwd[1],      fwd[2],      0,  
       ent.x,       ey,          ent.z,       1,  
     ];  
-    draw(quad, bb, whiteTex, [0.9, 0.85, 0.2]); // yellow item marker  
-  }
+    draw(quad, bb, whiteTex, tint);  
+  }  
   
-  // player billboard (always faces the camera)   
+  // player billboard (always faces the camera)  
   const w = 0.7, h = 1.2, px = player.x, py = baseY + 0.6, pz = player.z;  
   const billboard = [  
     right[0]*w, right[1]*w, right[2]*w, 0,  
@@ -310,7 +334,7 @@ function render() {
   draw(quad, billboard, whiteTex, [0.9, 0.2, 0.7]);  
   
   // HUD  
-  hud.textContent = `seed: ${worldSeed}  floor: ${player.level}  items: ${inventory.length}  (WASD move, right-drag orbit, wheel zoom)`;
+  hud.textContent = `seed: ${worldSeed}  floor: ${player.level}  items: ${inventory.length}  (WASD move, right-drag orbit, wheel zoom)`;  
 }  
   
 function frame(now) {  
