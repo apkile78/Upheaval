@@ -281,6 +281,10 @@ function render() {
     }  
   }  
 
+  const fwd = m4.norm(m4.sub(eye, center));  
+  const right = m4.norm(m4.cross([0, 1, 0], fwd));  
+  const up = m4.cross(fwd, right);
+  
   // draw world entities (items etc.) as camera-facing billboards  
   for (const ent of entities) {  
     if (ent.level !== player.level) continue;  
@@ -295,10 +299,7 @@ function render() {
     draw(quad, bb, whiteTex, [0.9, 0.85, 0.2]); // yellow item marker  
   }
   
-  // player billboard (always faces the camera)  
-  const fwd = m4.norm(m4.sub(eye, center));  
-  const right = m4.norm(m4.cross([0, 1, 0], fwd));  
-  const up = m4.cross(fwd, right);  
+  // player billboard (always faces the camera)   
   const w = 0.7, h = 1.2, px = player.x, py = baseY + 0.6, pz = player.z;  
   const billboard = [  
     right[0]*w, right[1]*w, right[2]*w, 0,  
