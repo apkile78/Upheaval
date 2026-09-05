@@ -1,4 +1,4 @@
-import * as m4 from "./math/mat4.js";
+import * as m4 from "./math/mat4.js";  
 import { World, CHUNK_SIZE, FLOOR, STAIRS } from "./world/world.js";  
 import { hashSeed } from "./world/rng.js";  
   
@@ -16,41 +16,24 @@ uniform mat4 u_viewProj;
 uniform mat4 u_model;  
 out vec2 v_uv;  
 out float v_shade;  
-out vec3 v_world;  
 void main() {  
   v_uv = a_uv;  
   v_shade = a_shade;  
-  vec4 world = u_model * vec4(a_pos, 1.0);  
-  v_world = world.xyz;  
-  gl_Position = u_viewProj * world;  
-}`;
+  gl_Position = u_viewProj * u_model * vec4(a_pos, 1.0);  
+}`;  
   
 const FRAG = `#version 300 es  
 precision mediump float;  
 in vec2 v_uv;  
 in float v_shade;  
-in vec3 v_world;  
 uniform sampler2D u_tex;  
 uniform vec3 u_tint;  
-uniform float u_cutout;   // 1.0 for walls/roofs, 0.0 otherwise  
-uniform vec3 u_eye;  
-uniform vec3 u_target;    // player head position  
 out vec4 outColor;  
 void main() {  
   vec4 t = texture(u_tex, v_uv);  
   if (t.a < 0.5) discard;                 // billboard/sprite cutout  
-  if (u_cutout > 0.5) {  
-    vec3 ab = u_target - u_eye;  
-    float k = clamp(dot(v_world - u_eye, ab) / dot(ab, ab), 0.0, 1.0);  
-    vec3 closest = u_eye + k * ab;  
-    // only fade fragments in FRONT of the player and near the eye->player line  
-    if (k < 0.95 && distance(v_world, closest) < 1.1) {  
-      ivec2 p = ivec2(gl_FragCoord.xy);  
-      if (((p.x + p.y) & 1) == 0) discard;   // 50% checkerboard see-through  
-    }  
-  }  
   outColor = vec4(t.rgb * u_tint * v_shade, 1.0);  
-}`;
+}`;  
   
 function compile(type, src) {  
   const s = gl.createShader(type);  
@@ -60,7 +43,6 @@ function compile(type, src) {
     throw new Error(gl.getShaderInfoLog(s));  
   return s;  
 }  
-
 function makeProgram(vs, fs) {  
   const p = gl.createProgram();  
   gl.attachShader(p, compile(gl.VERTEX_SHADER, vs));  
@@ -70,7 +52,6 @@ function makeProgram(vs, fs) {
     throw new Error(gl.getProgramInfoLog(p));  
   return p;  
 }  
-
 const prog = makeProgram(VERT, FRAG);  
 const U = {  
   viewProj: gl.getUniformLocation(prog, "u_viewProj"),  
@@ -136,15 +117,14 @@ const quad = makeMesh(new Float32Array([
   -0.5,  0.5, 0, 0, 0, 1,  
 ]));  
   
-function draw(mesh, model, tex, tint, cutout = 0) {  
+function draw(mesh, model, tex, tint) {  
   if (!mesh || !mesh.count) return;  
   gl.bindVertexArray(mesh.vao);  
   gl.uniformMatrix4fv(U.model, false, new Float32Array(model));  
   gl.uniform3fv(U.tint, tint);  
-  gl.uniform1f(U.cutout, cutout);  
   gl.bindTexture(gl.TEXTURE_2D, tex);  
   gl.drawArrays(gl.TRIANGLES, 0, mesh.count);  
-}
+}  
   
 // ---------- world + player ----------  
 const worldSeed = hashSeed(new URLSearchParams(location.search).get("seed"));  
@@ -167,37 +147,38 @@ for (let i = 0; i < 4096 && collides(player.x, player.z, player.level, player.r)
   if (player.x > 64) { player.x = 0.5; player.z += 1; }  
 }  
   
+// ---------- camera (orbit) ----------  
+let camYaw = Math.PI / 4;   // horizontal angle  
+let camPitch = 0.9;         // vertical angle (clamped so we never go under ground/char)  
+let camDist = 12;           // zoom distance  
+const PITCH_MIN = 0.25;     // ~14 deg above horizon, so we can't look up under the char  
+const PITCH_MAX = 1.45;     // ~83 deg, nearly top-down but never straight down  
+const DIST_MIN = 4, DIST_MAX = 40;  
+const SENS = 0.005;  
+  
 // ---------- input ----------  
 const keys = {};  
-
-// ---------- orbit camera ----------  
-let camYaw   = Math.PI / 4;   // matches your old diagonal default  
-let camPitch = 0.9;           // radians above the horizon (~51°)  
-let camDist  = 12;            // ~ hypot(6,9,6) from your old offset  
+addEventListener("keydown", (e) => { keys[e.code] = true; });  
+addEventListener("keyup",   (e) => { keys[e.code] = false; });  
   
-const PITCH_MIN = 0.15;       // just above horizon — never see under the ground  
-const PITCH_MAX = 1.50;       // just under straight-down (π/2 ≈ 1.5708)
-
-let dragging = false, lastX = 0, lastY = 0;  
-addEventListener("contextmenu", (e) => e.preventDefault()); // so right-drag doesn't open menu  
-addEventListener("mousedown", (e) => { if (e.button === 2) { dragging = true; lastX = e.clientX; lastY = e.clientY; } });  
+// right-drag to orbit  
+let dragging = false;  
+canvas.addEventListener("contextmenu", (e) => e.preventDefault());  
+canvas.addEventListener("mousedown", (e) => { if (e.button === 2) dragging = true; });  
 addEventListener("mouseup",   (e) => { if (e.button === 2) dragging = false; });  
 addEventListener("mousemove", (e) => {  
   if (!dragging) return;  
-  camYaw   -= (e.clientX - lastX) * 0.005;  
-  camPitch -= (e.clientY - lastY) * 0.005;  
-  camPitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, camPitch)); // the clamp  
-  lastX = e.clientX; lastY = e.clientY;  
+  camYaw   -= e.movementX * SENS;  
+  camPitch += e.movementY * SENS;   // inverted: drag down -> look down  
+  camPitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, camPitch));  
 });  
-addEventListener("wheel", (e) => {  
-  camDist = Math.max(4, Math.min(30, camDist + Math.sign(e.deltaY)));  
-}, { passive: true });
-
-addEventListener("keydown", (e) => {  
-  keys[e.code] = true;  
-});  
-addEventListener("keyup", (e) => { keys[e.code] = false; });
-
+// wheel to zoom  
+canvas.addEventListener("wheel", (e) => {  
+  e.preventDefault();  
+  camDist += e.deltaY * 0.01;  
+  camDist = Math.max(DIST_MIN, Math.min(DIST_MAX, camDist));  
+}, { passive: false });  
+  
 // ---------- fixed-timestep loop ----------  
 const STEP = 1 / 60;  
 let timeScale = 1;   // future: speed up crafting/sleeping  
@@ -215,12 +196,10 @@ function update(dt) {
     dx /= len; dz /= len;  
     const step = player.speed * dt;  
     // per-axis AABB-vs-tile collision so we slide along walls  
-  const nx = player.x + dx * step;  
+    const nx = player.x + dx * step;  
     if (!collides(nx, player.z, player.level, player.r)) player.x = nx;  
-    else console.log("blocked X", Math.floor(nx), Math.floor(player.z), "L", player.level);  
     const nz = player.z + dz * step;  
     if (!collides(player.x, nz, player.level, player.r)) player.z = nz;  
-    else console.log("blocked Z", Math.floor(player.x), Math.floor(nz), "L", player.level);  
   }  
 }  
   
@@ -242,25 +221,19 @@ function render() {
   gl.useProgram(prog);  
   gl.activeTexture(gl.TEXTURE0);  
   gl.uniform1i(U.tex, 0);  
-  gl.uniform3fv(U.eye, new Float32Array(eye));  
-  gl.uniform3fv(U.target, new Float32Array([player.x, baseY + 1.0, player.z]));
   
-  // camera
-
-  const baseY  = player.level * LAYER_H;  
+  // orbit camera around the player, raised to the current floor  
+  const baseY = player.level * LAYER_H;  
   const center = [player.x, baseY + 0.5, player.z];  
-  
-  const horiz = camDist * Math.cos(camPitch);   // horizontal reach  
-  const vert  = camDist * Math.sin(camPitch);   // height above center  
+  const cp = Math.cos(camPitch), sp = Math.sin(camPitch);  
   const eye = [  
-    center[0] + horiz * Math.sin(camYaw),  
-    center[1] + vert,  
-    center[2] + horiz * Math.cos(camYaw),  
+    center[0] + camDist * cp * Math.sin(camYaw),  
+    center[1] + camDist * sp,  
+    center[2] + camDist * cp * Math.cos(camYaw),  
   ];  
-  
   const proj = m4.perspective(Math.PI / 4, canvas.width / canvas.height, 0.1, 100);  
   const view = m4.lookAt(eye, center, [0, 1, 0]);  
-  gl.uniformMatrix4fv(U.viewProj, false, new Float32Array(m4.multiply(proj, view)));
+  gl.uniformMatrix4fv(U.viewProj, false, new Float32Array(m4.multiply(proj, view)));  
   
   // stream + draw a depth band (current floor + a couple below, dimmed)  
   world.update(player.x, player.z, RADIUS);  
@@ -278,30 +251,29 @@ function render() {
       const zoff = c.cz * CHUNK_SIZE;  
       const model = [1,0,0,0, 0,1,0,0, 0,0,1,0, xoff, yoff, zoff, 1];  
       draw(m.floorMesh,  model, floorTex, [dim, dim, dim]);  
-      draw(m.wallMesh,   model, wallTex,  [dim, dim, dim], 1);  
-      if (L < player.level) draw(m.roofMesh, model, wallTex, [dim, dim, dim], 1);  
-      draw(m.stairsMesh, model, whiteTex, [dim, dim * 0.9, 0.2]);  
+      draw(m.wallMesh,   model, wallTex,  [dim, dim, dim]);  
+      if (L < player.level) draw(m.roofMesh, model, wallTex, [dim, dim, dim]); // hide roof of current floor  
+      draw(m.stairsMesh, model, whiteTex, [dim, dim * 0.9, 0.2]); // yellow = stairs  
     }  
-  }
+  }  
   
-  // player billboard (always faces the fixed camera)  
+  // player billboard (always faces the camera)  
   const fwd = m4.norm(m4.sub(eye, center));  
   const right = m4.norm(m4.cross([0, 1, 0], fwd));  
-  const up = m4.cross(fwd, right);
+  const up = m4.cross(fwd, right);  
   const w = 0.7, h = 1.2, px = player.x, py = baseY + 0.6, pz = player.z;  
   const billboard = [  
     right[0]*w, right[1]*w, right[2]*w, 0,  
     up[0]*h,    up[1]*h,    up[2]*h,    0,  
     fwd[0],     fwd[1],     fwd[2],     0,  
     px,         py,         pz,         1,  
-  ];                             
-  draw(quad, billboard, whiteTex, [0.9, 0.2, 0.7]);
+  ];  
+  draw(quad, billboard, whiteTex, [0.9, 0.2, 0.7]);  
   
   // HUD  
-  hud.textContent = `seed: ${worldSeed}  floor: ${player.level}  (WASD move, R/F stairs, G smash)`;  
+  hud.textContent = `seed: ${worldSeed}  floor: ${player.level}  (WASD move, right-drag orbit, wheel zoom)`;  
 }  
   
-// ---------- fixed-timestep loop ----------  
 function frame(now) {  
   let dt = (now - last) / 1000; last = now;  
   if (dt > 0.25) dt = 0.25;   // clamp after tab-out so we don't spiral  
