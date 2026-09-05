@@ -4,7 +4,7 @@ import { beginFrame, setViewProj, draw, quad, floorTex, wallTex, whiteTex } from
 import { player, world, collides, worldSeed, inventory } from "./player.js";  
 import { entities, spawnItem, spawnMob, spawnFollower, updateEntities } from "./entities.js";  
 import { cameraEye } from "./camera.js";  
-import { keys } from "./input.js";  
+import { keys, invOpen } from "./input.js";  
   
 const RADIUS = 3;  
 const LAYER_H = 1.0;    // vertical spacing between floors  
@@ -107,18 +107,18 @@ function render() {
   
   hud.textContent = player.dead  
     ? `YOU DIED — no followers left. reload to restart.`  
-    : `seed: ${worldSeed}  floor: ${player.level}  hp: ${player.hp}/${player.maxHp}  items: ${inventory.length}  (WASD move, LMB attack, right-drag orbit, wheel zoom)`;  
-}  
+    : `seed: ${worldSeed}  floor: ${player.level}  hp: ${player.hp}/${player.maxHp}  items: ${inventory.length}  (WASD move, LMB attack, right-drag orbit, wheel zoom)`;
 
-const inv = document.getElementById("inv");  
-if (invOpen) {  
-  // aggregate duplicate itemIds into counts: "scrap x3"  
-  const counts = {};  
-  for (const id of inventory) counts[id] = (counts[id] || 0) + 1;  
-  const lines = Object.entries(counts).map(([id, n]) => `${id} x${n}`);  
-  inv.textContent = "INVENTORY (I to close)\n\n" +  
-    (lines.length ? lines.join("\n") : "(empty)");  
-}
+  const inv = document.getElementById("inv");  
+  if (invOpen) {  
+    const counts = {};  
+    for (const id of inventory) counts[id] = (counts[id] || 0) + 1;  
+    const lines = Object.entries(counts).map(([id, n]) => `${id} x${n}`);  
+    inv.textContent = "INVENTORY (I to close)\n\n" +  
+      (lines.length ? lines.join("\n") : "(empty)");  
+  }
+  
+}  
   
 // ---------- fixed-timestep loop ----------  
 const STEP = 1 / 60;  
