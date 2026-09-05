@@ -139,8 +139,8 @@ function collides(x, z, level, r) {
       if (world.isSolid(tx, tz, level)) return true;  
   return false;  
 }  
-
-const player = { x: 0.5, z: 0.5, level: 0, speed: 4, r: 0.3, hp: 100, maxHp: 100, hurtCd: 0, dead: false };
+  
+const player = { x: 0.5, z: 0.5, level: 0, speed: 4, r: 0.3, hp: 100, maxHp: 100, hurtCd: 0, dead: false };  
 // nudge spawn to the first open ground tile so we don't start inside a wall  
 for (let i = 0; i < 4096 && collides(player.x, player.z, player.level, player.r); i++) {  
   player.x += 1;  
@@ -157,19 +157,18 @@ function spawnItem(x, z, level, itemId) {
 function spawnMob(x, z, level, mobId) {  
   entities.push({ kind: "mob", x, z, level, mobId, r: 0.3, hp: 10, speed: 1.5 });  
 }  
-
 function spawnFollower(x, z, level) {  
   entities.push({ kind: "follower", x, z, level, r: 0.3, speed: 3.5 });  
-}
-
-spawnFollower(player.x - 3, player.z, player.level);
-
+}  
+  
 const inventory = [];   // array of itemId strings for now  
   
 // drop one test item two tiles in front of spawn so there's something to pick up  
 spawnItem(player.x + 2, player.z, player.level, "scrap");  
 // spawn one test zombie a few tiles away so there's something that moves  
 spawnMob(player.x + 5, player.z + 3, player.level, "zombie");  
+// spawn one follower so death has a body to possess (permadeath spine)  
+spawnFollower(player.x - 3, player.z, player.level);  
   
 // ---------- camera (orbit) ----------  
 let camYaw = Math.PI / 4;   // horizontal angle  
@@ -187,8 +186,8 @@ addEventListener("keyup",   (e) => { keys[e.code] = false; });
 addEventListener("mousedown", (e) => {  
   if (e.button !== 0) return;   // left click = attack  
   attack();  
-});
-
+});  
+  
 // right-drag to orbit  
 let dragging = false;  
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());  
@@ -206,10 +205,12 @@ canvas.addEventListener("wheel", (e) => {
   camDist += e.deltaY * 0.01;  
   camDist = Math.max(DIST_MIN, Math.min(DIST_MAX, camDist));  
 }, { passive: false });  
-
+  
+// ---------- combat ----------  
 const ATTACK_RANGE = 1.2;  
 const ATTACK_DMG = 5;  
 function attack() {  
+  if (player.dead) return;  
   let best = -1, bestD = ATTACK_RANGE * ATTACK_RANGE;  
   for (let i = 0; i < entities.length; i++) {  
     const e = entities[i];  
@@ -222,13 +223,8 @@ function attack() {
     e.hp -= ATTACK_DMG;  
     if (e.hp <= 0) entities.splice(best, 1);  
   }  
-}
-
-// ---------- fixed-timestep loop ----------  
-const STEP = 1 / 60;  
-let timeScale = 1;   // future: speed up crafting/sleeping  
-let acc = 0, last = performance.now();  
-
+}  
+  
 function handleDeath() {  
   // find nearest follower on the same floor to possess  
   let best = -1, bestD = Infinity;  
@@ -247,21 +243,22 @@ function handleDeath() {
   } else {  
     player.dead = true;   // no one left to control -> real game over  
   }  
-}
-
+}  
+  
+// ---------- fixed-timestep loop ----------  
+const STEP = 1 / 60;  
+let timeScale = 1;   // future: speed up crafting/sleeping  
+let acc = 0, last = performance.now();  
+  
 function update(dt) {  
-  function update(dt) {  
   if (player.dead) return;  
-  let dx = 0, dz = 0;  
   if (player.hurtCd > 0) player.hurtCd -= dt;  
+  
   let dx = 0, dz = 0;  
-  if (player.hurtCd > 0) player.hurtCd -= dt;
   if (keys["KeyW"] || keys["ArrowUp"])    dz -= 1;  
   if (keys["KeyS"] || keys["ArrowDown"])  dz += 1;  
   if (keys["KeyA"] || keys["ArrowLeft"])  dx -= 1;  
   if (keys["KeyD"] || keys["ArrowRight"]) dx += 1;  
-
-  
   
   // pickup: walk over an item on your floor to collect it  
   for (let i = entities.length - 1; i >= 0; i--) {  
@@ -293,12 +290,9 @@ function update(dt) {
       player.hurtCd = 0.6;   // seconds between bites  
       if (player.hp <= 0) {  
         player.hp = 0;  
-        if (player.hp <= 0) {  
-        player.hp = 0;  
         handleDeath();  
-      }   // placeholder until a death screen exists  
       }  
-    }
+    }  
   }  
   
   if (dx || dz) {  
@@ -371,15 +365,18 @@ function render() {
   const right = m4.norm(m4.cross([0, 1, 0], fwd));  
   const up = m4.cross(fwd, right);  
   
-  // draw world entities (items, mobs) as camera-facing billboards  
+  // draw world entities (items, mobs, followers) as camera-facing billboards  
   for (const ent of entities) {  
     if (ent.level !== player.level) continue;  
-    // mobs are bigger than items, and tinted differently by kind  
     const isMob = ent.kind === "mob";  
-    const ew = isMob ? 0.7 : 0.4;  
-    const eh = isMob ? 1.1 : 0.4;  
-    const ey = ent.level * LAYER_H + (isMob ? 0.55 : 0.25);  
-    const tint = isMob ? [0.3, 0.8, 0.3] : [0.9, 0.85, 0.2]; // green mob / yellow item  
+    const isFollower = ent.kind === "follower";  
+    const ew = (isMob || isFollower) ? 0.7 : 0.4;  
+    const eh = (isMob || isFollower) ? 1.1 : 0.4;  
+    const ey = ent.level * LAYER_H + ((isMob || isFollower) ? 0.55 : 0.25);  
+    // green mob / blue follower / yellow item  
+    const tint = isMob ? [0.3, 0.8, 0.3]  
+               : isFollower ? [0.3, 0.5, 0.9]  
+               : [0.9, 0.85, 0.2];  
     const bb = [  
       right[0]*ew, right[1]*ew, right[2]*ew, 0,  
       up[0]*eh,    up[1]*eh,    up[2]*eh,    0,  
@@ -401,9 +398,8 @@ function render() {
   
   // HUD  
   hud.textContent = player.dead  
-    
     ? `YOU DIED — no followers left. reload to restart.`  
-    : `seed: ${worldSeed}  floor: ${player.level}  hp: ${player.hp}/${player.maxHp}  items: ${inventory.length}  (WASD move, right-drag orbit, wheel zoom)`;
+    : `seed: ${worldSeed}  floor: ${player.level}  hp: ${player.hp}/${player.maxHp}  items: ${inventory.length}  (WASD move, LMB attack, right-drag orbit, wheel zoom)`;  
 }  
   
 function frame(now) {  
