@@ -1,0 +1,5 @@
+{  
+  "zombie": { "name": "Zombie", "hp": 10, "speed": 1.5, "dmg": 8, "tint": [0.3, 0.8, 0.3] },  
+  "bee":    { "name": "Bee",    "hp": 3,  "speed": 3.0, "dmg": 3, "tint": [0.9, 0.85, 0.2] },  
+  "migo":   { "name": "Mi-go",  "hp": 25, "speed": 1.2, "dmg": 15, "tint": [0.8, 0.4, 0.8] }  
+}
