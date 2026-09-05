@@ -178,7 +178,11 @@ const SENS = 0.005;
 const keys = {};  
 addEventListener("keydown", (e) => { keys[e.code] = true; });  
 addEventListener("keyup",   (e) => { keys[e.code] = false; });  
-  
+addEventListener("mousedown", (e) => {  
+  if (e.button !== 0) return;   // left click = attack  
+  attack();  
+});
+
 // right-drag to orbit  
 let dragging = false;  
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());  
@@ -196,7 +200,24 @@ canvas.addEventListener("wheel", (e) => {
   camDist += e.deltaY * 0.01;  
   camDist = Math.max(DIST_MIN, Math.min(DIST_MAX, camDist));  
 }, { passive: false });  
-  
+
+const ATTACK_RANGE = 1.2;  
+const ATTACK_DMG = 5;  
+function attack() {  
+  let best = -1, bestD = ATTACK_RANGE * ATTACK_RANGE;  
+  for (let i = 0; i < entities.length; i++) {  
+    const e = entities[i];  
+    if (e.kind !== "mob" || e.level !== player.level) continue;  
+    const d = (e.x - player.x) ** 2 + (e.z - player.z) ** 2;  
+    if (d < bestD) { bestD = d; best = i; }  
+  }  
+  if (best >= 0) {  
+    const e = entities[best];  
+    e.hp -= ATTACK_DMG;  
+    if (e.hp <= 0) entities.splice(best, 1);  
+  }  
+}
+
 // ---------- fixed-timestep loop ----------  
 const STEP = 1 / 60;  
 let timeScale = 1;   // future: speed up crafting/sleeping  
