@@ -146,6 +146,19 @@ for (let i = 0; i < 4096 && collides(player.x, player.z, player.level, player.r)
   player.x += 1;  
   if (player.x > 64) { player.x = 0.5; player.z += 1; }  
 }  
+
+// ---------- entities ----------  
+// every entity has: kind, x, z, level, and kind-specific fields.  
+// items carry an itemId string so they slot into a JSON registry later with no refactor.  
+const entities = [];  
+function spawnItem(x, z, level, itemId) {  
+  entities.push({ kind: "item", x, z, level, itemId, r: 0.25 });  
+}  
+  
+const inventory = [];   // array of itemId strings for now  
+  
+// drop one test item two tiles in front of spawn so there's something to pick up  
+spawnItem(player.x + 2, player.z, player.level, "scrap");
   
 // ---------- camera (orbit) ----------  
 let camYaw = Math.PI / 4;   // horizontal angle  
@@ -190,6 +203,17 @@ function update(dt) {
   if (keys["KeyS"] || keys["ArrowDown"])  dz += 1;  
   if (keys["KeyA"] || keys["ArrowLeft"])  dx -= 1;  
   if (keys["KeyD"] || keys["ArrowRight"]) dx += 1;  
+
+  // pickup: walk over an item on your floor to collect it  
+  for (let i = entities.length - 1; i >= 0; i--) {  
+    const e = entities[i];  
+    if (e.kind !== "item" || e.level !== player.level) continue;  
+    const d2 = (e.x - player.x) ** 2 + (e.z - player.z) ** 2;  
+    if (d2 < (player.r + e.r) ** 2) {  
+      inventory.push(e.itemId);  
+      entities.splice(i, 1);  
+    }  
+  }
   
   if (dx || dz) {  
     const len = Math.hypot(dx, dz);  
@@ -256,6 +280,20 @@ function render() {
       draw(m.stairsMesh, model, whiteTex, [dim, dim * 0.9, 0.2]); // yellow = stairs  
     }  
   }  
+
+  // draw world entities (items etc.) as camera-facing billboards  
+  for (const ent of entities) {  
+    if (ent.level !== player.level) continue;  
+    const ew = 0.4, eh = 0.4;  
+    const ey = ent.level * LAYER_H + 0.25;  
+    const bb = [  
+      right[0]*ew, right[1]*ew, right[2]*ew, 0,  
+      up[0]*eh,    up[1]*eh,    up[2]*eh,    0,  
+      fwd[0],      fwd[1],      fwd[2],      0,  
+      ent.x,       ey,          ent.z,       1,  
+    ];  
+    draw(quad, bb, whiteTex, [0.9, 0.85, 0.2]); // yellow item marker  
+  }
   
   // player billboard (always faces the camera)  
   const fwd = m4.norm(m4.sub(eye, center));  
@@ -271,7 +309,7 @@ function render() {
   draw(quad, billboard, whiteTex, [0.9, 0.2, 0.7]);  
   
   // HUD  
-  hud.textContent = `seed: ${worldSeed}  floor: ${player.level}  (WASD move, right-drag orbit, wheel zoom)`;  
+  hud.textContent = `seed: ${worldSeed}  floor: ${player.level}  items: ${inventory.length}  (WASD move, right-drag orbit, wheel zoom)`;
 }  
   
 function frame(now) {  
