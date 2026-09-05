@@ -1,0 +1,87 @@
+import { player, collides, inventory } from "./player.js";  
+  
+export const entities = [];  
+  
+export function spawnItem(x, z, level, itemId) {  
+  entities.push({ kind: "item", x, z, level, itemId, r: 0.25 });  
+}  
+export function spawnMob(x, z, level, mobId) {  
+  entities.push({ kind: "mob", x, z, level, mobId, r: 0.3, hp: 10, speed: 1.5 });  
+}  
+export function spawnFollower(x, z, level) {  
+  entities.push({ kind: "follower", x, z, level, r: 0.3, speed: 3.5 });  
+}  
+  
+const ATTACK_RANGE = 1.2;  
+const ATTACK_DMG = 5;  
+export function attack() {  
+  let best = -1, bestD = ATTACK_RANGE * ATTACK_RANGE;  
+  for (let i = 0; i < entities.length; i++) {  
+    const e = entities[i];  
+    if (e.kind !== "mob" || e.level !== player.level) continue;  
+    const d = (e.x - player.x) ** 2 + (e.z - player.z) ** 2;  
+    if (d < bestD) { bestD = d; best = i; }  
+  }  
+  if (best >= 0) {  
+    const e = entities[best];  
+    e.hp -= ATTACK_DMG;  
+    if (e.hp <= 0) entities.splice(best, 1);  
+  }  
+}  
+  
+function handleDeath() {  
+  // find nearest follower on the same floor to possess  
+  let best = -1, bestD = Infinity;  
+  for (let i = 0; i < entities.length; i++) {  
+    const e = entities[i];  
+    if (e.kind !== "follower" || e.level !== player.level) continue;  
+    const d = (e.x - player.x) ** 2 + (e.z - player.z) ** 2;  
+    if (d < bestD) { bestD = d; best = i; }  
+  }  
+  if (best >= 0) {  
+    const f = entities[best];  
+    player.x = f.x; player.z = f.z; player.level = f.level;  
+    player.hp = player.maxHp; player.hurtCd = 1.0;   // brief grace after swap  
+    entities.splice(best, 1);   // that follower is now "you"  
+  } else {  
+    player.dead = true;   // no one left to control -> real game over  
+  }  
+}  
+  
+// item pickup + mob chase + contact damage  
+export function updateEntities(dt) {  
+  // pickup: walk over an item on your floor to collect it  
+  for (let i = entities.length - 1; i >= 0; i--) {  
+    const e = entities[i];  
+    if (e.kind !== "item" || e.level !== player.level) continue;  
+    const d2 = (e.x - player.x) ** 2 + (e.z - player.z) ** 2;  
+    if (d2 < (player.r + e.r) ** 2) {  
+      inventory.push(e.itemId);  
+      entities.splice(i, 1);  
+    }  
+  }  
+  
+  // mobs: chase the player on the same floor  
+  for (const e of entities) {  
+    if (e.kind !== "mob" || e.level !== player.level) continue;  
+    let mx = player.x - e.x, mz = player.z - e.z;  
+    const md = Math.hypot(mx, mz);  
+    if (md > 0.001) {  
+      mx /= md; mz /= md;  
+      const mstep = e.speed * dt;  
+      const nx = e.x + mx * mstep;  
+      if (!collides(nx, e.z, e.level, e.r)) e.x = nx;  
+      const nz = e.z + mz * mstep;  
+      if (!collides(e.x, nz, e.level, e.r)) e.z = nz;  
+    }  
+    // contact damage  
+    if (md < e.r + player.r + 0.05 && player.hurtCd <= 0) {  
+      player.hp -= 8;  
+      player.hurtCd = 0.6;   // seconds between bites  
+      if (player.hp <= 0) {  
+        player.hp = 0;  
+        handleDeath();  
+      }  
+    }  
+  }  
+}
