@@ -6,12 +6,22 @@ export function spawnItem(x, z, level, itemId) {
   entities.push({ kind: "item", x, z, level, itemId, r: 0.25 });  
 }  
 export function spawnMob(x, z, level, mobId) {  
-  entities.push({ kind: "mob", x, z, level, mobId, r: 0.3, hp: 10, speed: 1.5 });  
-}  
+  const def = MONSTERS.data[mobId];  
+  entities.push({ kind: "mob", x, z, level, mobId, r: 0.3, hp: def.hp, speed: def.speed, dmg: def.dmg });  
+}
+
 export function spawnFollower(x, z, level) {  
   entities.push({ kind: "follower", x, z, level, r: 0.3, speed: 3.5 });  
 }  
+
+export const MONSTERS = {};  
+export const ITEMS = {};  
   
+export async function loadData() {  
+  MONSTERS.data = await (await fetch("./src/data/monsters.json")).json();  
+  ITEMS.data    = await (await fetch("./src/data/items.json")).json();  
+}
+
 const ATTACK_RANGE = 1.2;  
 const ATTACK_DMG = 5;  
 export function attack() {  
@@ -76,7 +86,7 @@ export function updateEntities(dt) {
     }  
     // contact damage  
     if (md < e.r + player.r + 0.05 && player.hurtCd <= 0) {  
-      player.hp -= 8;  
+      player.hp -= e.dmg;;  
       player.hurtCd = 0.6;   // seconds between bites  
       if (player.hp <= 0) {  
         player.hp = 0;  
