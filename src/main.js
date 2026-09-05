@@ -165,7 +165,7 @@ addEventListener("mouseup",   (e) => { if (e.button === 2) dragging = false; });
 addEventListener("mousemove", (e) => {  
   if (!dragging) return;  
   camYaw   -= (e.clientX - lastX) * 0.005;  
-  camPitch -= (e.clientY - lastY) * 0.005;  
+  camPitch += (e.clientY - lastY) * 0.005;  
   camPitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, camPitch)); // the clamp  
   lastX = e.clientX; lastY = e.clientY;  
 });  
