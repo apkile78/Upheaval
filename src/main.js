@@ -61,16 +61,6 @@ function compile(type, src) {
   return s;  
 }  
 
-const U = {  
-  viewProj: gl.getUniformLocation(prog, "u_viewProj"),  
-  model: gl.getUniformLocation(prog, "u_model"),  
-  tint: gl.getUniformLocation(prog, "u_tint"),  
-  tex: gl.getUniformLocation(prog, "u_tex"),  
-  cutout: gl.getUniformLocation(prog, "u_cutout"),  
-  eye: gl.getUniformLocation(prog, "u_eye"),  
-  target: gl.getUniformLocation(prog, "u_target"),  
-};
-
 function makeProgram(vs, fs) {  
   const p = gl.createProgram();  
   gl.attachShader(p, compile(gl.VERTEX_SHADER, vs));  
@@ -80,6 +70,7 @@ function makeProgram(vs, fs) {
     throw new Error(gl.getProgramInfoLog(p));  
   return p;  
 }  
+
 const prog = makeProgram(VERT, FRAG);  
 const U = {  
   viewProj: gl.getUniformLocation(prog, "u_viewProj"),  
