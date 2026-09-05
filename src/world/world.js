@@ -20,16 +20,8 @@ export function generateChunkTiles(seed, cx, cz) {
   
   const l0 = layers[0];  
   
-  for (let lz = 0; lz < CHUNK_SIZE; lz++) {  
-    for (let lx = 0; lx < CHUNK_SIZE; lx++) {  
-      const wx = cx * CHUNK_SIZE + lx;  
-      const wz = cz * CHUNK_SIZE + lz;  
-      const i = lz * CHUNK_SIZE + lx;  
-  
-      // bare minimum: noise blobs of WALL, everything else FLOOR  
-      const n = valueNoise2D(seed, wx * 0.08, wz * 0.08);  
-      l0[i] = (n > 0.72) ? WALL : FLOOR;  
-    }  
+  for (let i = 0; i < AREA; i++) {  
+    l0[i] = FLOOR;   // flat plane: floor everywhere, no walls  
   }
   
   return layers;  
