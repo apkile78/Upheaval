@@ -109,6 +109,16 @@ function render() {
     ? `YOU DIED — no followers left. reload to restart.`  
     : `seed: ${worldSeed}  floor: ${player.level}  hp: ${player.hp}/${player.maxHp}  items: ${inventory.length}  (WASD move, LMB attack, right-drag orbit, wheel zoom)`;  
 }  
+
+const inv = document.getElementById("inv");  
+if (invOpen) {  
+  // aggregate duplicate itemIds into counts: "scrap x3"  
+  const counts = {};  
+  for (const id of inventory) counts[id] = (counts[id] || 0) + 1;  
+  const lines = Object.entries(counts).map(([id, n]) => `${id} x${n}`);  
+  inv.textContent = "INVENTORY (I to close)\n\n" +  
+    (lines.length ? lines.join("\n") : "(empty)");  
+}
   
 // ---------- fixed-timestep loop ----------  
 const STEP = 1 / 60;  
