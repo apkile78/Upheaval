@@ -7,3 +7,12 @@ addEventListener("mousedown", (e) => {
   if (e.button !== 0) return;   // left click = attack  
   attack();  
 });
+
+let invOpen = false;  
+addEventListener("keydown", (e) => {  
+  keys[e.code] = true;  
+  if (e.code === "KeyI") {  
+    invOpen = !invOpen;  
+    document.getElementById("inv").style.display = invOpen ? "block" : "none";  
+  }  
+});
