@@ -150,6 +150,29 @@ for (let i = 0; i < 4096 && collides(player.x, player.z, player.level, player.r)
 // ---------- input ----------  
 const keys = {};  
 
+// ---------- orbit camera ----------  
+let camYaw   = Math.PI / 4;   // matches your old diagonal default  
+let camPitch = 0.9;           // radians above the horizon (~51°)  
+let camDist  = 12;            // ~ hypot(6,9,6) from your old offset  
+  
+const PITCH_MIN = 0.15;       // just above horizon — never see under the ground  
+const PITCH_MAX = 1.50;       // just under straight-down (π/2 ≈ 1.5708)
+
+let dragging = false, lastX = 0, lastY = 0;  
+addEventListener("contextmenu", (e) => e.preventDefault()); // so right-drag doesn't open menu  
+addEventListener("mousedown", (e) => { if (e.button === 2) { dragging = true; lastX = e.clientX; lastY = e.clientY; } });  
+addEventListener("mouseup",   (e) => { if (e.button === 2) dragging = false; });  
+addEventListener("mousemove", (e) => {  
+  if (!dragging) return;  
+  camYaw   -= (e.clientX - lastX) * 0.005;  
+  camPitch -= (e.clientY - lastY) * 0.005;  
+  camPitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, camPitch)); // the clamp  
+  lastX = e.clientX; lastY = e.clientY;  
+});  
+addEventListener("wheel", (e) => {  
+  camDist = Math.max(4, Math.min(30, camDist + Math.sign(e.deltaY)));  
+}, { passive: true });
+
 addEventListener("keydown", (e) => {  
   keys[e.code] = true;  
 });  
@@ -200,13 +223,18 @@ function render() {
   gl.activeTexture(gl.TEXTURE0);  
   gl.uniform1i(U.tex, 0);  
   
-  // fixed-angle camera that follows the player, raised to the current floor  
-  const baseY = player.level * LAYER_H;  
+  // camera
+
+  const baseY  = player.level * LAYER_H;  
   const center = [player.x, baseY + 0.5, player.z];  
-  const eye = [center[0] + 6, baseY + 9, center[2] + 6];  
-  const proj = m4.perspective(Math.PI / 4, canvas.width / canvas.height, 0.1, 100);  
-  const view = m4.lookAt(eye, center, [0, 1, 0]);  
-  gl.uniformMatrix4fv(U.viewProj, false, new Float32Array(m4.multiply(proj, view)));  
+  
+  const horiz = camDist * Math.cos(camPitch);   // horizontal reach  
+  const vert  = camDist * Math.sin(camPitch);   // height above center  
+  const eye = [  
+  center[0] + horiz * Math.sin(camYaw),  
+  center[1] + vert,  
+  center[2] + horiz * Math.cos(camYaw),  
+];
   
   // stream + draw a depth band (current floor + a couple below, dimmed)  
   world.update(player.x, player.z, RADIUS);  
