@@ -140,7 +140,7 @@ function collides(x, z, level, r) {
   return false;  
 }  
   
-const player = { x: 0.5, z: 0.5, level: 0, speed: 4, r: 0.3 };  
+const player = { x: 0.5, z: 0.5, level: 0, speed: 4, r: 0.3, hp: 100, maxHp: 100, hurtCd: 0 };
 // nudge spawn to the first open ground tile so we don't start inside a wall  
 for (let i = 0; i < 4096 && collides(player.x, player.z, player.level, player.r); i++) {  
   player.x += 1;  
@@ -204,10 +204,13 @@ let acc = 0, last = performance.now();
   
 function update(dt) {  
   let dx = 0, dz = 0;  
+  if (player.hurtCd > 0) player.hurtCd -= dt;
   if (keys["KeyW"] || keys["ArrowUp"])    dz -= 1;  
   if (keys["KeyS"] || keys["ArrowDown"])  dz += 1;  
   if (keys["KeyA"] || keys["ArrowLeft"])  dx -= 1;  
   if (keys["KeyD"] || keys["ArrowRight"]) dx += 1;  
+
+  
   
   // pickup: walk over an item on your floor to collect it  
   for (let i = entities.length - 1; i >= 0; i--) {  
@@ -233,6 +236,15 @@ function update(dt) {
       const nz = e.z + mz * mstep;  
       if (!collides(e.x, nz, e.level, e.r)) e.z = nz;  
     }  
+    // contact damage: if touching the player and cooldown is up, bite  
+    if (md < e.r + player.r + 0.05 && player.hurtCd <= 0) {  
+      player.hp -= 8;  
+      player.hurtCd = 0.6;   // seconds between bites  
+      if (player.hp <= 0) {  
+        player.hp = 0;  
+        console.log("you died");   // placeholder until a death screen exists  
+      }  
+    }
   }  
   
   if (dx || dz) {  
@@ -334,7 +346,7 @@ function render() {
   draw(quad, billboard, whiteTex, [0.9, 0.2, 0.7]);  
   
   // HUD  
-  hud.textContent = `seed: ${worldSeed}  floor: ${player.level}  items: ${inventory.length}  (WASD move, right-drag orbit, wheel zoom)`;  
+  hud.textContent = `seed: ${worldSeed}  floor: ${player.level}  hp: ${player.hp}/${player.maxHp}  items: ${inventory.length}  (WASD move, right-drag orbit, wheel zoom)`;
 }  
   
 function frame(now) {  
