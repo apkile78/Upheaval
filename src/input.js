@@ -8,7 +8,7 @@ addEventListener("mousedown", (e) => {
   attack();  
 });
 
-let invOpen = false;  
+export let invOpen = false;  
 addEventListener("keydown", (e) => {  
   keys[e.code] = true;  
   if (e.code === "KeyI") {  
