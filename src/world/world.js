@@ -60,7 +60,6 @@ export function generateChunkTiles(seed, cx, cz) {
   }  
   
   const bld = buildingAt(seed, cx, cz);  
-  const bld = buildingAt(seed, cx, cz);  
   if (bld && TEMPLATES.data && TEMPLATES.data[bld.id]) {  
     stampSlice(TEMPLATES.data[bld.id], bld.sliceX || 0, bld.sliceZ || 0, l0, furn[0]);  
   } else if (bld && bld.id === "house") {  
