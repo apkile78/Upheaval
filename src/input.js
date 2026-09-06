@@ -23,6 +23,16 @@ addEventListener("keydown", (e) => {
   }  
 });
 
+export let omPanX = 0, omPanZ = 0;  
+addEventListener("keydown", (e) => {  
+  if (!omOpen) return;  
+  const step = 3;  
+  if (e.code === "ArrowLeft")  omPanX -= step;  
+  if (e.code === "ArrowRight") omPanX += step;  
+  if (e.code === "ArrowUp")    omPanZ -= step;  
+  if (e.code === "ArrowDown")  omPanZ += step;  
+});
+
 import { attack, useItem } from "./entities.js";  
 import { inventory } from "./player.js";  
   
