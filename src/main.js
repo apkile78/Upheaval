@@ -135,7 +135,9 @@ console.log("alive");
 
 loadData().then(() => {  
   spawnFollower(player.x - 3, player.z, player.level);  
-  spawnItem(player.x + 2, player.z, player.level, "scrap");  
+  spawnItem(player.x + 2, player.z, player.level, "scrap");
+  spawnItem(player.x + 3, player.z + 1, player.level, "apple");  
+  spawnItem(player.x + 4, player.z - 1, player.level, "water");
   spawnMob(player.x + 5, player.z + 3, player.level, "zombie");  
   requestAnimationFrame(frame);  
 });
