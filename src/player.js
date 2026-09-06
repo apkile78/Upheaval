@@ -14,9 +14,18 @@ export function collides(x, z, level, r) {
 }  
   
 // nudge spawn to first open tile so we don't start inside a wall  
-for (let i = 0; i < 4096 && collides(player.x, player.z, player.level, player.r); i++) {  
-  player.x += 1;  
-  if (player.x > 64) { player.x = 0.5; player.z += 1; }  
+// nudge spawn to an open tile whose 4 neighbors are also open (no tree box)  
+function spawnOk(x, z) {  
+  if (collides(x, z, player.level, player.r)) return false;  
+  const tx = Math.floor(x), tz = Math.floor(z);  
+  return !world.isSolid(tx + 1, tz, player.level)  
+      && !world.isSolid(tx - 1, tz, player.level)  
+      && !world.isSolid(tx, tz + 1, player.level)  
+      && !world.isSolid(tx, tz - 1, player.level);  
 }  
+for (let i = 0; i < 8192 && !spawnOk(player.x, player.z); i++) {  
+  player.x += 1;  
+  if (player.x > 128) { player.x = 0.5; player.z += 1; }  
+}
   
 export const inventory = [];
