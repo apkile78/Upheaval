@@ -9,13 +9,14 @@ const BUILDINGS = {
   milbase: { cls: "field", w: 7, h: 13, chance: 0.35, spacing: 5 },  
 };  
   
+export const BIOME_FREQ = 0.006;   // lower = bigger biomes (~5 chunks/cell). try 0.004 for even bigger  
 export function biomeAt(seed, cx, cz) {  
   const wx = cx * CHUNK + CHUNK / 2, wz = cz * CHUNK + CHUNK / 2;  
-  const b = valueNoise2D(seed, wx * 0.02, wz * 0.02);  
+  const b = valueNoise2D(seed, wx * BIOME_FREQ, wz * BIOME_FREQ);  
   if (b < 0.40) return "field";  
   if (b < 0.68) return "forest";  
   return "city";  
-}  
+} 
   
 function cellRng(seed, cx, cz)  { return mulberry32(cyrb53(`bldg:${cx},${cz}`, seed)); }  
 function regRng(seed, rx, rz, s){ return mulberry32(cyrb53(`${s}:${rx},${rz}`, seed)); }  
