@@ -15,6 +15,14 @@ addEventListener("keydown", (e) => {
   }  
 });
 
+export let omOpen = false;  
+addEventListener("keydown", (e) => {  
+  if (e.code === "KeyM") {  
+    omOpen = !omOpen;  
+    document.getElementById("om").style.display = omOpen ? "block" : "none";  
+  }  
+});
+
 import { attack, useItem } from "./entities.js";  
 import { inventory } from "./player.js";  
   
