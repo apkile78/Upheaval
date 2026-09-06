@@ -19,7 +19,21 @@ export const F_NONE = 0;
 export const F_COUNTER = 1;  
 export const F_FRIDGE = 2;  
 export const F_TABLE = 3;
+
+// ---------- building templates ----------  
+export const TEMPLATES = {};  
+export async function loadBuildings() {  
+  TEMPLATES.data = await (await fetch("./src/data/buildings.json")).json();  
+}  
   
+const SYM = {  
+  ".": { t: FLOOR }, " ": { t: FLOOR }, "#": { t: WALL },  
+  "+": { t: FLOOR }, "t": { t: TREE }, "_": { t: ROAD },  
+  "F": { t: FLOOR, f: F_FRIDGE },  
+  "C": { t: FLOOR, f: F_COUNTER },  
+  "T": { t: FLOOR, f: F_TABLE },  
+};
+
 // ---------- generation ----------  
 export function generateChunkTiles(seed, cx, cz) {  
   const layers = [], furn = [];  
@@ -46,8 +60,14 @@ export function generateChunkTiles(seed, cx, cz) {
   }  
   
   const bld = buildingAt(seed, cx, cz);  
-  if (bld && bld.id === "house")   stampHouse(l0, furn[0]);  
-  else if (bld && bld.id === "milbase") stampMilbaseSlice(l0, bld.sliceX, bld.sliceZ, bld.w, bld.h);  
+  const bld = buildingAt(seed, cx, cz);  
+  if (bld && TEMPLATES.data && TEMPLATES.data[bld.id]) {  
+    stampSlice(TEMPLATES.data[bld.id], bld.sliceX || 0, bld.sliceZ || 0, l0, furn[0]);  
+  } else if (bld && bld.id === "house") {  
+    stampHouse(l0, furn[0]);                 // fallback if templates not loaded yet  
+  } else if (bld && bld.id === "milbase") {  
+    stampMilbaseSlice(l0, bld.sliceX, bld.sliceZ, bld.w, bld.h);  
+  }
   
   return { layers, furn };  
 }  
@@ -76,8 +96,22 @@ function stampMilbaseSlice(l0, sliceX, sliceZ, w, h) {
     }  
 }
 
-// ---------- world ---------- 
+// generic: stamp one 32x32 cell of a template. missing cells -> perimeter fallback.  
+function stampSlice(tpl, sliceX, sliceZ, l0, furn0) {  
+  const rows = tpl.cells[sliceX + "," + sliceZ];  
+  if (!rows) { stampMilbaseSlice(l0, sliceX, sliceZ, tpl.size[0], tpl.size[1]); return; }  
+  for (let lz = 0; lz < CHUNK_SIZE; lz++) {  
+    const line = rows[lz] || "";  
+    for (let lx = 0; lx < CHUNK_SIZE; lx++) {  
+      const m = SYM[line[lx]] || SYM["."];  
+      const i = lz * CHUNK_SIZE + lx;  
+      l0[i] = m.t;  
+      if (m.f) furn0[i] = m.f;  
+    }  
+  }  
+}
 
+// ---------- world ---------- 
 export class World {  
   constructor(seed, gl, makeMesh) {  
     this.seed = seed >>> 0;  
