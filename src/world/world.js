@@ -41,11 +41,6 @@ export function generateChunkTiles(seed, cx, cz) {
 }
   
 // ---------- world ---------- 
-//---solid trees---
-isSolid(tx, tz, level) {  
-  const t = this.getTile(tx, tz, level);  
-  return t === WALL || t === TREE;  
-}
 
 export class World {  
   constructor(seed, gl, makeMesh) {  
@@ -102,8 +97,9 @@ export class World {
   }  
   
   isSolid(tx, tz, level) {  
-    return this.getTile(tx, tz, level) === WALL;  
-  }  
+    const t = this.getTile(tx, tz, level);  
+    return t === WALL || t === TREE;  
+  }
   
   setTile(tx, tz, level, value) {  
     if (level < 0 || level >= N_LAYERS) return;  
