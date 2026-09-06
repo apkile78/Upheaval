@@ -5,13 +5,25 @@ import { player, world, collides, worldSeed, inventory } from "./player.js";
 import { cameraEye } from "./camera.js";  
 import { keys, invOpen, invSel } from "./input.js";  
 import { entities, spawnItem, spawnMob, spawnFollower, attack, updateEntities, loadData, MONSTERS, ITEMS } from "./entities.js";
+import { chunkSpawns } from "./world/overmap.js";
 
 const RADIUS = 3;  
 const LAYER_H = 1.0;    // vertical spacing between floors  
 const BAND_BELOW = 2;   // floors below current one to draw (dimmed)    
   
 const hud = document.getElementById("hud");  
-  
+
+const spawnedChunks = new Set();  
+function spawnChunkEntities(c) {  
+  const key = c.cx + "," + c.cz;  
+  if (spawnedChunks.has(key)) return;   // already spawned -> never again  
+  spawnedChunks.add(key);  
+  for (const s of chunkSpawns(worldSeed, c.cx, c.cz)) {  
+    if (s.kind === "item") spawnItem(s.x, s.z, s.level, s.id);  
+    else if (s.kind === "mob") spawnMob(s.x, s.z, s.level, s.id);  
+  }  
+}
+
 // ---------- update ----------  
 function update(dt) {  
   if (player.dead) return;  
@@ -57,9 +69,13 @@ function render() {
   setViewProj(m4.multiply(proj, view));  
   
   // stream + draw a depth band  
-  world.update(player.x, player.z, RADIUS);  
+  world.update(player.x, player.z, RADIUS); 
+  
   const chunks = world.loadedChunks(player.x, player.z, RADIUS);  
+  for (const c of chunks) spawnChunkEntities(c);
+  
   const lo = Math.max(0, player.level - BAND_BELOW);  
+  
   for (let L = lo; L <= player.level; L++) {  
     const yoff = L * LAYER_H;  
     const dim = Math.pow(0.55, player.level - L);  
@@ -75,6 +91,8 @@ function render() {
       draw(m.stairsMesh, model, whiteTex, [dim, dim * 0.9, 0.2]);  
       draw(m.furnMesh, model, whiteTex, [dim * 0.3, dim * 0.5, dim]);
     }  
+
+    
   }  
   
   // camera-facing billboard basis  
