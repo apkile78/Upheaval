@@ -86,7 +86,8 @@ export class World {
     const gen = generateChunkTiles(this.seed, cx, cz);
     c = {  
       cx, cz,  
-      tiles: gen.layers, // array[L] of Uint8Array  
+      tiles: gen.layers, // array[L] of Uint8Array 
+      furn: gen.furn,
       diff: {},                                     // encodedIndex -> tileValue  
       diffLoaded: false,  
       meshes: new Array(N_LAYERS).fill(null),       // meshes[L] = {floorMesh,wallMesh,stairsMesh}  
@@ -145,12 +146,6 @@ export class World {
   buildLayerMeshData(c, level) {  
     const floor = [], wall = [], stairs = [], roof = [];  
     const tiles = c.tiles[level];  
-
-    const fv = c.furn[level][lz * CHUNK_SIZE + lx];  
-        if (fv !== F_NONE) {  
-          const y1 = 0.5;  
-          pushQuad(stairs, [[x,y1,z,0,0],[x+1,y1,z,1,0],[x+1,y1,z+1,1,1],[x,y1,z+1,0,1]], 1.0);  
-        }
     
     const baseX = c.cx * CHUNK_SIZE, baseZ = c.cz * CHUNK_SIZE;  
   
@@ -167,7 +162,16 @@ export class World {
       for (let lx = 0; lx < CHUNK_SIZE; lx++) {  
         const t = tiles[lz * CHUNK_SIZE + lx];  
         const x = lx, z = lz; // local coords; chunk world-offset handled below  
+
+        const t = tiles[lz * CHUNK_SIZE + lx];  
+        const x = lx, z = lz;  
   
+        const fv = c.furn[level][lz * CHUNK_SIZE + lx];  
+        if (fv !== F_NONE) {  
+          const y1 = 0.5;  
+          pushQuad(stairs, [[x,y1,z,0,0],[x+1,y1,z,1,0],[x+1,y1,z+1,1,1],[x,y1,z+1,0,1]], 1.0);  
+        }
+        
         if (t === FLOOR || t === STAIRS) {  
           // flat floor quad slightly above 0 to avoid z-fighting  
           pushQuad(floor, [  
