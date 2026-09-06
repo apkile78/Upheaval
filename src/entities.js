@@ -110,4 +110,3 @@ export function updateEntities(dt) {
       }  
     }  
   }  
-}
