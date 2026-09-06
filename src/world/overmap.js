@@ -6,7 +6,7 @@ const R = 16;       // region size in chunks (mil-base placement grid)
 // ---------- tunables ----------  
 export const BIOME_FREQ = 0.006;   // base field/forest noise; lower = bigger patches  
 const CITY_CHANCE   = 0.55;        // chance a region rolls a city candidate  
-const CITY_SPACING  = 10;          // min regions between accepted cities  
+const CITY_SPACING  = 2;          // min regions between accepted cities  
 const MAX_ROAD_DIST = 20;          // max regions apart two cities may be road-linked  
 const ROAD_HALF     = 1.5;         // highway half-width in tiles (=> ~3 tiles wide)  
 const CITY_ST       = 8;           // intra-city street spacing in tiles  
