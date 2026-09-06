@@ -1,6 +1,6 @@
 import { chunkRng, valueNoise2D } from "./rng.js";  
 import { loadDiff, saveDiff } from "./storage.js"; 
-import { buildingAt, biomeAt, isRoadTile, BIOME_FREQ } from "./overmap.js";  
+import { buildingAt, biomeAt, buildRoadTester, BIOME_FREQ } from "./overmap.js";  
 
 // ---------- constants ----------  
 export const CHUNK_SIZE = 32;  
@@ -44,14 +44,14 @@ export function generateChunkTiles(seed, cx, cz) {
   const rng = chunkRng(seed, cx, cz);  
   const l0 = layers[0];  
   const biome = biomeAt(seed, cx, cz);  
-  const isRoad = buildRoadTester(seed, cx, cz);  
+  const roadHere = buildRoadTester(seed, cx, cz);  
   
   for (let lz = 0; lz < CHUNK_SIZE; lz++) {  
     for (let lx = 0; lx < CHUNK_SIZE; lx++) {  
       const wx = cx * CHUNK_SIZE + lx, wz = cz * CHUNK_SIZE + lz;  
       const i = lz * CHUNK_SIZE + lx;  
       l0[i] = FLOOR;  
-      if (isRoad(wx, wz)) { l0[i] = ROAD; continue; }   // roads override ground  
+      if (roadHere(wx, wz)) { l0[i] = ROAD; continue; }   // roads override ground  
       if (biome === "forest" && rng() < 0.18) l0[i] = TREE;  
     }  
   }
