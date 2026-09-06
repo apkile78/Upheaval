@@ -4,7 +4,7 @@ import { gl, makeMesh } from "./gl/renderer.js";
   
 export const worldSeed = hashSeed(new URLSearchParams(location.search).get("seed"));  
 export const world = new World(worldSeed, gl, makeMesh);  
-export const player = { x: 0.5, z: 0.5, level: 0, speed: 4, r: 0.3, hp: 100, maxHp: 100, hurtCd: 0, dead: false, hunger: 100, thirst: 100 };
+export const player = { x: 0.5, z: 0.5, level: 0, speed: 4, r: 0.3, hp: 100, maxHp: 100, hurtCd: 0, dead: false, hunger: 100, maxHunger: 100, thirst: 100, maxThirst: 100 };
 
 export function collides(x, z, level, r) {  
   for (let tz = Math.floor(z - r); tz <= Math.floor(z + r); tz++)  
