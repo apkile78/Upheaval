@@ -69,6 +69,14 @@ export function updateEntities(dt) {
       inventory.push(e.itemId);  
       entities.splice(i, 1);  
     }  
+
+    // survival: hunger/thirst drain over time; empty ones chip hp  
+  player.hunger = Math.max(0, player.hunger - 0.5 * dt);  
+  player.thirst = Math.max(0, player.thirst - 0.7 * dt);  
+  if (player.hunger <= 0) player.hp -= 2 * dt;  
+  if (player.thirst <= 0) player.hp -= 2 * dt;  
+  if (player.hp <= 0) { player.hp = 0; handleDeath(); }
+    
   }  
   
   // mobs: chase the player on the same floor  
