@@ -38,7 +38,19 @@ export function attack() {
     if (e.hp <= 0) entities.splice(best, 1);  
   }  
 }  
-  
+
+export function useItem(id) {  
+  const idx = inventory.indexOf(id);  
+  if (idx < 0) return;  
+  const def = ITEMS.data[id];  
+  if (!def) return;  
+  let used = false;  
+  if (def.food)  { player.hunger = Math.min(player.maxHunger, player.hunger + def.food); used = true; }  
+  if (def.water) { player.thirst = Math.min(player.maxThirst, player.thirst + def.water); used = true; }  
+  if (def.heal)  { player.hp     = Math.min(player.maxHp,     player.hp     + def.heal);  used = true; }  
+  if (used) inventory.splice(idx, 1);   // consume one  
+}
+
 function handleDeath() {  
   // find nearest follower on the same floor to possess  
   let best = -1, bestD = Infinity;  
