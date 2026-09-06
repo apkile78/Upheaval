@@ -78,14 +78,7 @@ export function updateEntities(dt) {
     if (e.kind !== "item" || e.level !== player.level) continue;  
     const d2 = (e.x - player.x) ** 2 + (e.z - player.z) ** 2;  
     if (d2 < (player.r + e.r) ** 2) {  
-      const def = ITEMS.data[e.itemId];  
-      if (def && (def.food || def.water)) {  
-        // consumable: eat/drink immediately, don't store  
-        if (def.food)  player.hunger = Math.min(player.maxHunger, player.hunger + def.food);  
-        if (def.water) player.thirst = Math.min(player.maxThirst, player.thirst + def.water);  
-      } else {  
-        inventory.push(e.itemId);   // non-consumable: goes to inventory  
-      }  
+      inventory.push(e.itemId);   // everything goes to inventory; consume later with E  
       entities.splice(i, 1);  
     }
   }
