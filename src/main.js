@@ -5,6 +5,7 @@ import { player, world, collides, worldSeed, inventory } from "./player.js";
 import { cameraEye } from "./camera.js";  
 import { keys, invOpen, invSel, omOpen } from "./input.js";
 import { entities, spawnItem, spawnMob, spawnFollower, attack, updateEntities, loadData, MONSTERS, ITEMS } from "./entities.js";
+import { chunkSpawns } from "./world/overmap.js";
 const RADIUS = 3;  
 const LAYER_H = 1.0;    // vertical spacing between floors  
 const BAND_BELOW = 2;   // floors below current one to draw (dimmed)    
