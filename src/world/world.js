@@ -161,8 +161,7 @@ export class World {
     for (let lz = 0; lz < CHUNK_SIZE; lz++) {  
       for (let lx = 0; lx < CHUNK_SIZE; lx++) {  
         const t = tiles[lz * CHUNK_SIZE + lx];  
-        const x = lx, z = lz; // local coords; chunk world-offset handled below  
-        const x = lx, z = lz;  
+        const x = lx, z = lz; // local coords; chunk world-offset handled below   
   
         const fv = c.furn[level][lz * CHUNK_SIZE + lx];  
         if (fv !== F_NONE) {  
