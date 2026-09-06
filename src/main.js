@@ -104,8 +104,8 @@ function render() {
   
   hud.textContent = player.dead  
     ? `YOU DIED — no followers left. reload to restart.`  
-    : `seed: ${worldSeed}  floor: ${player.level}  hp: ${player.hp}/${player.maxHp}  items: ${inventory.length}  (WASD move, LMB attack, right-drag orbit, wheel zoom)`;
-
+    : `seed: ${worldSeed}  floor: ${player.level}  hp: ${Math.ceil(player.hp)}/${player.maxHp}  food: ${Math.round(player.hunger)}  water: ${Math.round(player.thirst)}  items: ${inventory.length}  (WASD move, LMB attack, right-drag orbit, wheel zoom)`;
+    
   const inv = document.getElementById("inv");  
   if (invOpen) {  
     const counts = {};  
