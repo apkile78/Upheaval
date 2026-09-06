@@ -19,7 +19,8 @@ export let omOpen = false;
 addEventListener("keydown", (e) => {  
   if (e.code === "KeyM") {  
     omOpen = !omOpen;  
-    document.getElementById("om").style.display = omOpen ? "block" : "none";  
+    const om = document.getElementById("overmap");  
+    if (om) om.style.display = omOpen ? "block" : "none";  
   }  
 });
 
