@@ -1,79 +1,123 @@
 import { cyrb53, mulberry32, valueNoise2D } from "./rng.js";  
   
-const CHUNK = 32;   // keep in sync with CHUNK_SIZE in world.js  
-const R = 16;       // region size in chunks (smallest OK: holds a 7x13 base w/ margin)  
+const CHUNK = 32;             // keep in sync with CHUNK_SIZE in world.js  
+const R = 16;                 // region size in chunks  
   
-// generic, extensible schema — later this moves to buildings.json  
+// ---- tunables ----  
+const CITY_SPACING  = 10;     // min regions between city centers  
+const CITY_CHANCE   = 0.9;    // per-region roll BEFORE spacing thinning  
+const MAX_ROAD_DIST = 20;     // regions; connect cities within this (double spacing)  
+const MAX_BLOB_RAD  = 12;     // largest blob radius (chunks)  
+const CLUSTER_MAX   = 16;     // max blob-center drift from city center (chunks)  
+const ROAD_HALF     = 1;      // road half-width in tiles (=> 3 wide)  
+const CITY_ST       = 16;     // intra-city street spacing (tiles)  
+const CITY_REACH    = Math.ceil((CLUSTER_MAX + MAX_BLOB_RAD) / R) + 1;  
+  
+export const BIOME_FREQ = 0.006;  
+  
 const BUILDINGS = {  
   house:   { cls: "city",  w: 1, h: 1,  chance: 0.5  },  
   milbase: { cls: "field", w: 7, h: 13, chance: 0.35, spacing: 5 },  
 };  
   
-export const BIOME_FREQ = 0.006;   // lower = bigger biomes (~5 chunks/cell). try 0.004 for even bigger  
-export function biomeAt(seed, cx, cz) {  
-  const wx = cx * CHUNK + CHUNK / 2, wz = cz * CHUNK + CHUNK / 2;  
-  const b = valueNoise2D(seed, wx * BIOME_FREQ, wz * BIOME_FREQ);  
-  if (b < 0.40) return "forest";  
-  if (b < 0.68) return "field";  
-  return "city";  
-} 
-  
 function cellRng(seed, cx, cz)  { return mulberry32(cyrb53(`bldg:${cx},${cz}`, seed)); }  
 function regRng(seed, rx, rz, s){ return mulberry32(cyrb53(`${s}:${rx},${rz}`, seed)); }  
   
-// grid roads: arterials everywhere (connect regions), dense streets inside cities.  
-// a grid is connective by construction, so every building touches the network.  
-const ARTERIAL = 96, CITY_ST = 16;  
-export function isRoadTile(wx, wz, biome) {  
-  if (((wx % ARTERIAL) + ARTERIAL) % ARTERIAL === 0) return true;  
-  if (((wz % ARTERIAL) + ARTERIAL) % ARTERIAL === 0) return true;  
-  if (biome === "city") {  
-    if (((wx % CITY_ST) + CITY_ST) % CITY_ST === 0) return true;  
-    if (((wz % CITY_ST) + CITY_ST) % CITY_ST === 0) return true;  
+// underlying (city-free) land type at a chunk  
+function underlyingForest(seed, cx, cz) {  
+  const wx = cx * CHUNK + CHUNK / 2, wz = cz * CHUNK + CHUNK / 2;  
+  return valueNoise2D(seed, wx * BIOME_FREQ, wz * BIOME_FREQ) >= 0.5;  
+}  
+  
+// ---------- city nodes ----------  
+function cityCandidate(seed, rx, rz) {  
+  const r = regRng(seed, rx, rz, "cty");  
+  if (r() >= CITY_CHANCE) return null;  
+  const cx = rx * R + Math.floor(r() * R);  
+  const cz = rz * R + Math.floor(r() * R);  
+  return { rx, rz, cx, cz, prio: r() };  
+}  
+  
+function cityBlobs(seed, node) {  
+  const r = mulberry32(cyrb53(`blob:${node.rx},${node.rz}`, seed));  
+  let n = 1 + Math.floor(r() * 4);              // common 1..4  
+  if (r() < 0.12) n += 1 + Math.floor(r() * 6); // rare large -> up to ~10  
+  const blobs = [];  
+  for (let i = 0; i < n; i++) {  
+    let rad = 3 + Math.floor(r() * 3);          // small 3..5  
+    if (r() < 0.30) rad = 8 + Math.floor(r() * 5); // big 8..12  
+    let ox = 0, oz = 0;  
+    if (i > 0) {                                 // grow from an existing blob so they connect  
+      const base = blobs[Math.floor(r() * i)];  
+      const ang = r() * Math.PI * 2;  
+      const dist = Math.floor((base.rad + rad) * (0.5 + r() * 0.4));  
+      ox = (base.cx - node.cx) + Math.round(Math.cos(ang) * dist);  
+      oz = (base.cz - node.cz) + Math.round(Math.sin(ang) * dist);  
+      ox = Math.max(-CLUSTER_MAX, Math.min(CLUSTER_MAX, ox));  
+      oz = Math.max(-CLUSTER_MAX, Math.min(CLUSTER_MAX, oz));  
+    }  
+    blobs.push({ cx: node.cx + ox, cz: node.cz + oz, rad });  
   }  
-  return false;  
+  return blobs;  
 }  
   
-// does region (rx,rz) *want* a mil base, and where is its anchor chunk?  
-function milbaseCandidate(seed, rx, rz) {  
-  const def = BUILDINGS.milbase;  
-  if (regRng(seed, rx, rz, "mb")() >= def.chance) return null;  
-  const a = regRng(seed, rx, rz, "mba");  
-  const ax = rx * R + Math.floor(a() * (R - def.w));  
-  const az = rz * R + Math.floor(a() * (R - def.h));  
-  if (biomeAt(seed, ax, az) !== "field") return null;   // fields only  
-  return { ax, az, w: def.w, h: def.h, prio: a() };  
+const _cityCache = new Map();  
+export function cityNode(seed, rx, rz) {  
+  const k = `${seed}:${rx},${rz}`;  
+  if (_cityCache.has(k)) return _cityCache.get(k);  
+  let node = cityCandidate(seed, rx, rz);  
+  if (node) {  
+    const S = CITY_SPACING;  
+    outer:  
+    for (let dz = -S; dz <= S; dz++)  
+      for (let dx = -S; dx <= S; dx++) {  
+        if (!dx && !dz) continue;  
+        const o = cityCandidate(seed, rx + dx, rz + dz);  
+        if (o && o.prio > node.prio) { node = null; break outer; }  
+      }  
+  }  
+  if (node) {  
+    node.blobs = cityBlobs(seed, node);  
+    node.large = node.blobs.length >= 5 || node.blobs.some(b => b.rad >= 8);  
+    if (!node.large && underlyingForest(seed, node.cx, node.cz)) node = null; // small cities avoid forest  
+  }  
+  _cityCache.set(k, node);  
+  return node;  
 }  
   
-// keep a candidate only if it outranks every candidate within `spacing` regions  
-function milbaseFor(seed, rx, rz) {  
-  const me = milbaseCandidate(seed, rx, rz);  
-  if (!me) return null;  
-  const S = BUILDINGS.milbase.spacing;  
-  for (let dz = -S; dz <= S; dz++)  
-    for (let dx = -S; dx <= S; dx++) {  
-      if (!dx && !dz) continue;  
-      const o = milbaseCandidate(seed, rx + dx, rz + dz);  
-      if (o && o.prio > me.prio) return null;  
-    }  
-  return me;  
-}  
-  
-// what building (if any) covers chunk (cx,cz)? returns slice offsets for multi-chunk  
-export function buildingAt(seed, cx, cz) {  
+export function cityAt(seed, cx, cz) {  
   const rx = Math.floor(cx / R), rz = Math.floor(cz / R);  
-  // mil-base footprint can cross a region border, so check this region + 8 neighbours  
-  for (let dz = -1; dz <= 1; dz++)  
-    for (let dx = -1; dx <= 1; dx++) {  
-      const mb = milbaseFor(seed, rx + dx, rz + dz);  
-      if (mb && cx >= mb.ax && cx < mb.ax + mb.w && cz >= mb.az && cz < mb.az + mb.h)  
-        return { id: "milbase", w: mb.w, h: mb.h, sliceX: cx - mb.ax, sliceZ: cz - mb.az };  
+  for (let dz = -CITY_REACH; dz <= CITY_REACH; dz++)  
+    for (let dx = -CITY_REACH; dx <= CITY_REACH; dx++) {  
+      const node = cityNode(seed, rx + dx, rz + dz);  
+      if (!node) continue;  
+      for (const b of node.blobs) {  
+        const ddx = cx - b.cx, ddz = cz - b.cz;  
+        if (ddx * ddx + ddz * ddz <= b.rad * b.rad) return node;  
+      }  
     }  
-  if (biomeAt(seed, cx, cz) === "city" && cellRng(seed, cx, cz)() < BUILDINGS.house.chance)  
-    return { id: "house" };  
   return null;  
 }  
   
+// ---------- biome: cities nested inside a field/forest base ----------  
+export function biomeAt(seed, cx, cz) {  
+  if (cityAt(seed, cx, cz)) return "city";  
+  return underlyingForest(seed, cx, cz) ? "forest" : "field";  
+}  
+  
+// ---------- roads: connect city nodes within MAX_ROAD_DIST ----------  
+function pointSegDist2(px, pz, ax, az, bx, bz) {  
+  const dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz;  
+  let t = l2 ? ((px - ax) * dx + (pz - az) * dz) / l2 : 0;  
+  t = Math.max(0, Math.min(1, t));  
+  const qx = ax + t * dx, qz = az + t * dz;  
+  const ex = px - qx, ez = pz - qz;  
+  return ex * ex + ez * ez;  
+}  
+  
+// build a per-chunk road predicate once (cheap per-tile afterwards)  
+export function buildRoadTester(seed, cx, cz) {  
+  const isCity = biom
 // deterministic loot/mobs — spawned once, never renewed  
 export function chunkSpawns(seed, cx, cz) {  
   const bld = buildingAt(seed, cx, cz);  
