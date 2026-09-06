@@ -49,21 +49,23 @@ export function generateChunkTiles(seed, cx, cz) {
   
   const bld = buildingAt(seed, cx, cz);  
   if (bld && bld.id === "house") stampHouse(l0, WALL, FLOOR);  
-  
+
+  if (cx === 0 && cz === 0) stampHouse(layers[0], furn[0]);  
   return { layers, furn };  
+  }
 }
 
-function stampHouse(l0, f0) {  
+function stampHouse(l0, furn) {  
   const x0 = 12, z0 = 12, w = 8, h = 8;  
   for (let z = z0; z < z0 + h; z++)  
     for (let x = x0; x < x0 + w; x++) {  
       const edge = (x === x0 || x === x0 + w - 1 || z === z0 || z === z0 + h - 1);  
       l0[z * CHUNK_SIZE + x] = edge ? WALL : FLOOR;  
     }  
-  l0[(z0 + h - 1) * CHUNK_SIZE + (x0 + w / 2)] = FLOOR;   // south doorway  
-  // furniture inside  
-  f0[(z0 + 1) * CHUNK_SIZE + (x0 + 1)] = F_FRIDGE;  
-  f0[(z0 + 1) * CHUNK_SIZE + (x0 + 2)] = F_COUNTER;  
+  l0[(z0 + h - 1) * CHUNK_SIZE + (x0 + Math.floor(w / 2))] = FLOOR; // south doorway  
+  // furniture inside the house  
+  furn[(z0 + 1) * CHUNK_SIZE + (x0 + 1)] = F_FRIDGE;  
+  furn[(z0 + 1) * CHUNK_SIZE + (x0 + 2)] = F_COUNTER;  
 }
   
 // ---------- world ---------- 
