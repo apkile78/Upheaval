@@ -1,8 +1,6 @@
 import { chunkRng, valueNoise2D } from "./rng.js";  
 import { loadDiff, saveDiff } from "./storage.js"; 
 import { buildingAt, biomeAt, isRoadTile, BIOME_FREQ } from "./overmap.js";  
-// ...  
-const b = valueNoise2D(seed, wx * BIOME_FREQ, wz * BIOME_FREQ);
 
 // ---------- constants ----------  
 export const CHUNK_SIZE = 32;  
