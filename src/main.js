@@ -3,8 +3,8 @@ import { CHUNK_SIZE, STAIRS } from "./world/world.js";
 import { beginFrame, setViewProj, draw, quad, floorTex, wallTex, whiteTex } from "./gl/renderer.js";  
 import { player, world, collides, worldSeed, inventory } from "./player.js";  
 import { cameraEye } from "./camera.js";  
-import { keys, invOpen, invSel, omOpen } from "./input.js";
-import { entities, spawnItem, spawnMob, spawnFollower, attack, updateEntities, loadData, MONSTERS, ITEMS } from "./entities.js";
+import { keys, invOpen, invSel } from "./input.js";  
+import { entities, spawnItem, spawnMob, spawnFollower, attack, updateEntities, loadData, MONSTERS, ITEMS } from "./entities.js";  
 import { chunkSpawns } from "./world/overmap.js";
 const RADIUS = 3;  
 const LAYER_H = 1.0;    // vertical spacing between floors  
