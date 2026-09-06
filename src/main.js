@@ -5,6 +5,7 @@ import { player, world, collides, worldSeed, inventory } from "./player.js";
 import { entities, spawnItem, spawnMob, spawnFollower, attack, updateEntities, loadData } from "./entities.js";
 import { cameraEye } from "./camera.js";  
 import { keys, invOpen } from "./input.js";  
+import { loadData, spawnItem, spawnMob, spawnFollower } from "./entities.js";
   
 const RADIUS = 3;  
 const LAYER_H = 1.0;    // vertical spacing between floors  
