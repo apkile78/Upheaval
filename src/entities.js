@@ -107,7 +107,7 @@ export function updateEntities(dt) {
     }  
     // contact damage  
     if (md < e.r + player.r + 0.05 && player.hurtCd <= 0) {  
-      player.hp -= e.dmg;;  
+      player.hp -= e.dmg;
       player.hurtCd = 0.6;   // seconds between bites  
       if (player.hp <= 0) {  
         player.hp = 0;  
