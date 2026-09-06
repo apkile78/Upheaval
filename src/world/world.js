@@ -40,7 +40,7 @@ export function generateChunkTiles(seed, cx, cz) {
       const b = valueNoise2D(seed, wx * 0.02, wz * 0.02);  
       if (b >= 0.40 && b < 0.68) {  
         const density = 1 - Math.abs((b - 0.54) / 0.14);  
-        if (rng() < 0.05 + 0.20 * density) l0[i] = TREE;  
+        if (biome === "forest" && rng() < 0.25) l0[i] = TREE;  
       }  
     }  
   }  
