@@ -9,7 +9,8 @@ import { chunkSpawns, buildingAt, biomeAt } from "./world/overmap.js";
 const RADIUS = 3;  
 const LAYER_H = 1.0;    // vertical spacing between floors  
 const BAND_BELOW = 2;   // floors below current one to draw (dimmed)    
-  
+
+let omPanX = 0, omPanZ = 0;   // overmap view offset in chunks
 const hud = document.getElementById("hud");  
 
 const spawnedChunks = new Set();  
@@ -29,6 +30,15 @@ function update(dt) {
   if (player.hurtCd > 0) player.hurtCd -= dt;  
   
   updateEntities(dt);  
+  
+  if (omOpen) {                       // map open: arrows pan, player frozen  
+    const pan = 20 * dt;              // chunks/sec  
+    if (keys["ArrowUp"]    || keys["KeyW"]) omPanZ -= pan;  
+    if (keys["ArrowDown"]  || keys["KeyS"]) omPanZ += pan;  
+    if (keys["ArrowLeft"]  || keys["KeyA"]) omPanX -= pan;  
+    if (keys["ArrowRight"] || keys["KeyD"]) omPanX += pan;  
+    return;                          // no player movement/stairs while map open  
+  }
   
   let dx = 0, dz = 0;  
   if (keys["KeyW"] || keys["ArrowUp"])    dz -= 1;  
@@ -150,6 +160,7 @@ function render() {
   const om = document.getElementById("overmap");  
   if (omOpen) {  
     const pcx = Math.floor(player.x / CHUNK_SIZE), pcz = Math.floor(player.z / CHUNK_SIZE);  
+    const pcx0 = Math.floor(player.x / CHUNK_SIZE), pcz0 = Math.floor(player.z / CHUNK_SIZE);
     const ccx = pcx + omPanX, ccz = pcz + omPanZ;   // view center = you + pan  
     const RAD = 20;                                  // bump for a bigger map  
     let s = "OVERMAP (M close, arrows pan)  @ you  H house  M milbase  # city  ^ forest  . field\n\n";  
