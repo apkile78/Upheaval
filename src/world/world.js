@@ -44,16 +44,11 @@ export function generateChunkTiles(seed, cx, cz) {
       }  
     }  
   }  
-  // TEMP Stage-1 proof: stamp a 6x5 house at local (4,4) on this chunk only if cx===0 && cz===0  
-  if (cx === 0 && cz === 0) stampHouse(layers[0], furn[0]);  
+  // Stage-1 proof: stamp one house on the spawn chunk only  
+  if (cx === 0 && cz === 0) stampHouse(l0, furn[0]);  
   
-  const bld = buildingAt(seed, cx, cz);  
-  if (bld && bld.id === "house") stampHouse(l0, WALL, FLOOR);  
-
-  if (cx === 0 && cz === 0) stampHouse(layers[0], furn[0]);  
   return { layers, furn };  
-  }
-}
+} 
 
 function stampHouse(l0, furn) {  
   const x0 = 12, z0 = 12, w = 8, h = 8;  
