@@ -3,8 +3,8 @@ import { CHUNK_SIZE } from "./world/world.js";
 import { beginFrame, setViewProj, draw, quad, floorTex, wallTex, whiteTex } from "./gl/renderer.js";  
 import { player, world, collides, worldSeed, inventory } from "./player.js";  
 import { cameraEye } from "./camera.js";  
-import { keys, invOpen } from "./input.js";  
-import { entities, spawnItem, spawnMob, spawnFollower, attack, updateEntities, loadData, MONSTERS } from "./entities.js";
+import { keys, invOpen, invSel } from "./input.js";  
+import { entities, spawnItem, spawnMob, spawnFollower, attack, updateEntities, loadData, MONSTERS, ITEMS } from "./entities.js";
 
 const RADIUS = 3;  
 const LAYER_H = 1.0;    // vertical spacing between floors  
@@ -110,8 +110,12 @@ function render() {
   if (invOpen) {  
     const counts = {};  
     for (const id of inventory) counts[id] = (counts[id] || 0) + 1;  
-    const lines = Object.entries(counts).map(([id, n]) => `${id} x${n}`);  
-    inv.textContent = "INVENTORY (I to close)\n\n" +  
+    const ids = Object.keys(counts);  
+    const lines = ids.map((id, i) => {  
+      const name = ITEMS.data[id] ? ITEMS.data[id].name : id;  
+      return `${i === invSel ? "> " : "  "}${i + 1}. ${name} x${counts[id]}`;  
+    });  
+    inv.textContent = "INVENTORY (I close, 1-9 select, E use)\n\n" +  
       (lines.length ? lines.join("\n") : "(empty)");  
   }
   
