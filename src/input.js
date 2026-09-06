@@ -16,3 +16,21 @@ addEventListener("keydown", (e) => {
     document.getElementById("inv").style.display = invOpen ? "block" : "none";  
   }  
 });
+
+import { attack, useItem } from "./entities.js";  
+import { inventory } from "./player.js";  
+  
+export let invSel = 0;  
+  
+addEventListener("keydown", (e) => {  
+  if (!invOpen) return;  
+  const ids = [...new Set(inventory)];        // unique types, same order as panel  
+  if (e.code.startsWith("Digit")) {  
+    const n = Number(e.code.slice(5)) - 1;  
+    if (n >= 0 && n < ids.length) invSel = n;  
+  }  
+  if (e.code === "KeyE" || e.code === "Enter") {  
+    const id = ids[invSel];  
+    if (id) useItem(id);  
+  }  
+});
