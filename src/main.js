@@ -9,12 +9,7 @@ import { loadData, spawnItem, spawnMob, spawnFollower } from "./entities.js";
   
 const RADIUS = 3;  
 const LAYER_H = 1.0;    // vertical spacing between floors  
-const BAND_BELOW = 2;   // floors below current one to draw (dimmed)  
-  
-// initial spawns  
-spawnFollower(player.x - 3, player.z, player.level);  
-spawnItem(player.x + 2, player.z, player.level, "scrap");  
-spawnMob(player.x + 5, player.z + 3, player.level, "zombie");  
+const BAND_BELOW = 2;   // floors below current one to draw (dimmed)    
   
 const hud = document.getElementById("hud");  
   
@@ -135,3 +130,11 @@ function frame(now) {
 }  
 loadData().then(() => requestAnimationFrame(frame));  
 console.log("alive");
+
+
+loadData().then(() => {  
+  spawnFollower(player.x - 3, player.z, player.level);  
+  spawnItem(player.x + 2, player.z, player.level, "scrap");  
+  spawnMob(player.x + 5, player.z + 3, player.level, "zombie");  
+  requestAnimationFrame(frame);  
+});
