@@ -12,11 +12,21 @@ export const FLOOR = 1;
 export const WALL = 2;  
 export const STAIRS = 3;  
 export const TREE = 4;
+export const ROAD = 5;  
+// furniture values (separate grid, rendered on top of floor tiles)  
+export const F_NONE = 0;  
+export const F_COUNTER = 1;  
+export const F_FRIDGE = 2;  
+export const F_TABLE = 3;
   
 // ---------- generation ----------  
 export function generateChunkTiles(seed, cx, cz) {  
   const layers = [];  
-  for (let L = 0; L < N_LAYERS; L++) layers.push(new Uint8Array(AREA));  
+  const furn = [];  
+  for (let L = 0; L < N_LAYERS; L++) {  
+    layers.push(new Uint8Array(AREA));  
+    furn.push(new Uint8Array(AREA));   // F_NONE = 0  
+  }  
   const rng = chunkRng(seed, cx, cz);  
   const l0 = layers[0];  
   
@@ -26,18 +36,33 @@ export function generateChunkTiles(seed, cx, cz) {
       const wz = cz * CHUNK_SIZE + lz;  
       const i = lz * CHUNK_SIZE + lx;  
       l0[i] = FLOOR;  
-  
-      // low-frequency biome field -> smooth bands (autocorrelated)  
       const b = valueNoise2D(seed, wx * 0.02, wz * 0.02);  
       if (b >= 0.40 && b < 0.68) {  
-        // forest: scatter trees, denser toward the band center  
-        const density = 1 - Math.abs((b - 0.54) / 0.14); // 0..1  
+        const density = 1 - Math.abs((b - 0.54) / 0.14);  
         if (rng() < 0.05 + 0.20 * density) l0[i] = TREE;  
       }  
-      // b < 0.40 = field (bare floor); b >= 0.68 = city (buildings below)  
     }  
   }  
-  return layers;  
+  
+  // TEMP Stage-1 proof: stamp a 6x5 house at local (4,4) on this chunk only if cx===0 && cz===0  
+  if (cx === 0 && cz === 0) stampHouse(layers[0], furn[0]);  
+  
+  return { layers, furn };  
+}
+
+function stampHouse(l0, f0) {  
+  const ox = 4, oz = 4, w = 6, h = 5;  
+  for (let z = 0; z < h; z++)  
+    for (let x = 0; x < w; x++) {  
+      const i = (oz + z) * CHUNK_SIZE + (ox + x);  
+      const edge = x === 0 || z === 0 || x === w - 1 || z === h - 1;  
+      l0[i] = edge ? WALL : FLOOR;  
+    }  
+  // doorway  
+  l0[(oz + h - 1) * CHUNK_SIZE + (ox + 2)] = FLOOR;  
+  // fridge + counter inside  
+  f0[(oz + 1) * CHUNK_SIZE + (ox + 1)] = F_FRIDGE;  
+  f0[(oz + 1) * CHUNK_SIZE + (ox + 2)] = F_COUNTER;  
 }
   
 // ---------- world ---------- 
@@ -57,13 +82,15 @@ export class World {
     const k = this.key(cx, cz);  
     let c = this.chunks.get(k);  
     if (c) return c;  
-  
+
+    const gen = generateChunkTiles(this.seed, cx, cz);
     c = {  
       cx, cz,  
-      tiles: generateChunkTiles(this.seed, cx, cz), // array[L] of Uint8Array  
+      tiles: gen.layers, // array[L] of Uint8Array  
       diff: {},                                     // encodedIndex -> tileValue  
       diffLoaded: false,  
       meshes: new Array(N_LAYERS).fill(null),       // meshes[L] = {floorMesh,wallMesh,stairsMesh}  
+
     };  
     this.chunks.set(k, c);  
   
@@ -118,6 +145,13 @@ export class World {
   buildLayerMeshData(c, level) {  
     const floor = [], wall = [], stairs = [], roof = [];  
     const tiles = c.tiles[level];  
+
+    const fv = c.furn[level][lz * CHUNK_SIZE + lx];  
+        if (fv !== F_NONE) {  
+          const y1 = 0.5;  
+          pushQuad(stairs, [[x,y1,z,0,0],[x+1,y1,z,1,0],[x+1,y1,z+1,1,1],[x,y1,z+1,0,1]], 1.0);  
+        }
+    
     const baseX = c.cx * CHUNK_SIZE, baseZ = c.cz * CHUNK_SIZE;  
   
     const pushQuad = (arr, verts, shade) => {  
