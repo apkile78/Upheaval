@@ -13,7 +13,6 @@ export function collides(x, z, level, r) {
   return false;  
 }  
   
-export const player = { x: 0.5, z: 0.5, level: 0, speed: 4, r: 0.3, hp: 100, maxHp: 100, hurtCd: 0, dead: false };  
 // nudge spawn to first open tile so we don't start inside a wall  
 for (let i = 0; i < 4096 && collides(player.x, player.z, player.level, player.r); i++) {  
   player.x += 1;  
