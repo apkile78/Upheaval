@@ -10,7 +10,6 @@ const RADIUS = 3;
 const LAYER_H = 1.0;    // vertical spacing between floors  
 const BAND_BELOW = 2;   // floors below current one to draw (dimmed)    
 
-let omPanX = 0, omPanZ = 0;   // overmap view offset in chunks
 const hud = document.getElementById("hud");  
 
 const spawnedChunks = new Set();  
