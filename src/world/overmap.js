@@ -186,9 +186,6 @@ export function buildingAt(seed, cx, cz) {
   return null;  
 }
   
-// build a per-chunk road predicate once (cheap per-tile afterwards)  
-export function buildRoadTester(seed, cx, cz) {  
-  const isCity = biom
 // deterministic loot/mobs — spawned once, never renewed  
 export function chunkSpawns(seed, cx, cz) {  
   const bld = buildingAt(seed, cx, cz);  
