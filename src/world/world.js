@@ -1,7 +1,7 @@
 import { chunkRng, valueNoise2D } from "./rng.js";  
 import { loadDiff, saveDiff } from "./storage.js"; 
-import { buildingAt } from "./overmap.js";
-  
+import { buildingAt, biomeAt, isRoadTile } from "./overmap.js";
+
 // ---------- constants ----------  
 export const CHUNK_SIZE = 32;  
 export const N_LAYERS = 8;             // capped vertical stack (milestone 6, option A)  
@@ -22,21 +22,21 @@ export const F_TABLE = 3;
   
 // ---------- generation ----------  
 export function generateChunkTiles(seed, cx, cz) {  
-  const layers = [];  
-  const furn = [];  
+  const layers = [], furn = [];  
   for (let L = 0; L < N_LAYERS; L++) {  
     layers.push(new Uint8Array(AREA));  
     furn.push(new Uint8Array(AREA));   // F_NONE = 0  
   }  
   const rng = chunkRng(seed, cx, cz);  
   const l0 = layers[0];  
+  const biome = biomeAt(seed, cx, cz);  
   
   for (let lz = 0; lz < CHUNK_SIZE; lz++) {  
     for (let lx = 0; lx < CHUNK_SIZE; lx++) {  
-      const wx = cx * CHUNK_SIZE + lx;  
-      const wz = cz * CHUNK_SIZE + lz;  
+      const wx = cx * CHUNK_SIZE + lx, wz = cz * CHUNK_SIZE + lz;  
       const i = lz * CHUNK_SIZE + lx;  
       l0[i] = FLOOR;  
+      if (isRoadTile(wx, wz, biome)) { l0[i] = ROAD; continue; }  // roads override ground  
       const b = valueNoise2D(seed, wx * 0.02, wz * 0.02);  
       if (b >= 0.40 && b < 0.68) {  
         const density = 1 - Math.abs((b - 0.54) / 0.14);  
@@ -44,28 +44,38 @@ export function generateChunkTiles(seed, cx, cz) {
       }  
     }  
   }  
-  // building placement: guarantee a house at spawn, otherwise ask the overmap  
-  let bld = buildingAt(seed, cx, cz);  
-  if (cx === 0 && cz === 0) bld = { id: "house" };   // always a house at spawn for testing  
-  if (bld && bld.id === "house") stampHouse(l0, furn[0]);  
+  
+  const bld = buildingAt(seed, cx, cz);  
+  if (bld && bld.id === "house")   stampHouse(l0, furn[0]);  
+  else if (bld && bld.id === "milbase") stampMilbaseSlice(l0, bld.sliceX, bld.sliceZ, bld.w, bld.h);  
   
   return { layers, furn };  
+}  
   
-} 
-
-function stampHouse(l0, f0) {  
-  const x0 = 12, z0 = 12, w = 8, h = 8;   // 8x8 house in a 32-wide chunk  
+function stampHouse(l0, furn0) {  
+  const x0 = 12, z0 = 12, w = 8, h = 8;  
   for (let z = z0; z < z0 + h; z++)  
     for (let x = x0; x < x0 + w; x++) {  
       const edge = (x === x0 || x === x0 + w - 1 || z === z0 || z === z0 + h - 1);  
       l0[z * CHUNK_SIZE + x] = edge ? WALL : FLOOR;  
     }  
-  l0[(z0 + h - 1) * CHUNK_SIZE + (x0 + Math.floor(w / 2))] = FLOOR;   // south doorway  
-  // furniture inside  
-  f0[(z0 + 1) * CHUNK_SIZE + (x0 + 1)] = F_FRIDGE;  
-  f0[(z0 + 1) * CHUNK_SIZE + (x0 + 2)] = F_COUNTER;  
-}
+  l0[(z0 + h - 1) * CHUNK_SIZE + (x0 + w / 2)] = FLOOR;        // south doorway  
+  furn0[(z0 + 1) * CHUNK_SIZE + (x0 + 1)] = F_FRIDGE;          // one fridge  
+  furn0[(z0 + 1) * CHUNK_SIZE + (x0 + 2)] = F_COUNTER;         // one counter  
+}  
   
+// one 32x32 slice of a w x h (chunks) building; walls only on the true outer border  
+function stampMilbaseSlice(l0, sliceX, sliceZ, w, h) {  
+  for (let lz = 0; lz < CHUNK_SIZE; lz++)  
+    for (let lx = 0; lx < CHUNK_SIZE; lx++) {  
+      const west  = sliceX === 0     && lx === 0;  
+      const east  = sliceX === w - 1 && lx === CHUNK_SIZE - 1;  
+      const north = sliceZ === 0     && lz === 0;  
+      const south = sliceZ === h - 1 && lz === CHUNK_SIZE - 1;  
+      l0[lz * CHUNK_SIZE + lx] = (west || east || north || south) ? WALL : FLOOR;  
+    }  
+}
+
 // ---------- world ---------- 
 
 export class World {  
@@ -170,7 +180,7 @@ export class World {
             pushQuad(furnGeo, [[x,y1,z,0,0],[x+1,y1,z,1,0],[x+1,y1,z+1,1,1],[x,y1,z+1,0,1]], 1.0);  
         }
         
-        if (t === FLOOR || t === STAIRS) {  
+        if (t === FLOOR || t === STAIRS || t === ROAD) {  
           // flat floor quad slightly above 0 to avoid z-fighting  
           pushQuad(floor, [  
             [x,     0.02, z    , 0, 0],  
