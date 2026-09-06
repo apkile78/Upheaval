@@ -4,7 +4,7 @@ import { beginFrame, setViewProj, draw, quad, floorTex, wallTex, whiteTex } from
 import { player, world, collides, worldSeed, inventory } from "./player.js";  
 import { cameraEye } from "./camera.js";  
 import { keys, invOpen } from "./input.js";  
-import { entities, spawnItem, spawnMob, spawnFollower, attack, updateEntities, loadData } from "./entities.js";
+import { entities, spawnItem, spawnMob, spawnFollower, attack, updateEntities, loadData, MONSTERS } from "./entities.js";
 
 const RADIUS = 3;  
 const LAYER_H = 1.0;    // vertical spacing between floors  
@@ -80,7 +80,9 @@ function render() {
     const ew = (isMob || isFollower) ? 0.7 : 0.4;  
     const eh = (isMob || isFollower) ? 1.1 : 0.4;  
     const ey = ent.level * LAYER_H + ((isMob || isFollower) ? 0.55 : 0.25);  
-    const tint = isMob ? [0.3, 0.8, 0.3] : isFollower ? [0.3, 0.5, 0.9] : [0.9, 0.85, 0.2];  
+    const tint = isMob  
+      ? (MONSTERS.data[ent.mobId]?.tint || [0.3, 0.8, 0.3])  
+      : isFollower ? [0.3, 0.5, 0.9] : [0.9, 0.85, 0.2];
     const bb = [  
       right[0]*ew, right[1]*ew, right[2]*ew, 0,  
       up[0]*eh,    up[1]*eh,    up[2]*eh,    0,  
