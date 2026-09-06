@@ -89,6 +89,7 @@ function render() {
       if (L < player.level) draw(m.roofMesh, model, wallTex, [dim, dim, dim]);  
       draw(m.stairsMesh, model, whiteTex, [dim, dim * 0.9, 0.2]);  
       draw(m.furnMesh, model, whiteTex, [dim * 0.3, dim * 0.5, dim]);
+      draw(m.roadMesh, model, whiteTex, [dim * 0.28, dim * 0.28, dim * 0.30]);
     }  
 
     
