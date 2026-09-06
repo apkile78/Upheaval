@@ -1,5 +1,5 @@
 import * as m4 from "./math/mat4.js";  
-import { CHUNK_SIZE } from "./world/world.js";  
+import { CHUNK_SIZE, STAIRS } from "./world/world.js";  
 import { beginFrame, setViewProj, draw, quad, floorTex, wallTex, whiteTex } from "./gl/renderer.js";  
 import { player, world, collides, worldSeed, inventory } from "./player.js";  
 import { cameraEye } from "./camera.js";  
@@ -34,6 +34,15 @@ function update(dt) {
     const nz = player.z + dz * step;  
     if (!collides(player.x, nz, player.level, player.r)) player.z = nz;  
   }  
+  // stairs: stepping onto a STAIRS tile moves you between the connected floors  
+  if (player.stairCd > 0) player.stairCd -= dt;  
+  const here = world.getTile(Math.floor(player.x), Math.floor(player.z), player.level);  
+  if (here === STAIRS && player.stairCd <= 0) {  
+    const up   = world.getTile(Math.floor(player.x), Math.floor(player.z), player.level + 1);  
+    const down = world.getTile(Math.floor(player.x), Math.floor(player.z), player.level - 1);  
+    if (up === STAIRS)      { player.level += 1; player.stairCd = 0.5; }  
+    else if (down === STAIRS){ player.level -= 1; player.stairCd = 0.5; }  
+  }
 }  
   
 // ---------- render ----------  
