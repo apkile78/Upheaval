@@ -133,9 +133,6 @@ function frame(now) {
   render();  
   requestAnimationFrame(frame);  
 }  
-loadData().then(() => requestAnimationFrame(frame));  
-console.log("alive");
-
 
 loadData().then(() => {  
   spawnFollower(player.x - 3, player.z, player.level);  
