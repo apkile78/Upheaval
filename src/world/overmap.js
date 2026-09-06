@@ -13,8 +13,8 @@ export const BIOME_FREQ = 0.006;   // lower = bigger biomes (~5 chunks/cell). tr
 export function biomeAt(seed, cx, cz) {  
   const wx = cx * CHUNK + CHUNK / 2, wz = cz * CHUNK + CHUNK / 2;  
   const b = valueNoise2D(seed, wx * BIOME_FREQ, wz * BIOME_FREQ);  
-  if (b < 0.40) return "field";  
-  if (b < 0.68) return "forest";  
+  if (b < 0.40) return "forest";  
+  if (b < 0.68) return "field";  
   return "city";  
 } 
   
