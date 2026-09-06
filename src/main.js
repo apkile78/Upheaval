@@ -146,7 +146,7 @@ function render() {
       (lines.length ? lines.join("\n") : "(empty)");  
   }
 
-  const om = document.getElementById("om");  
+const om = document.getElementById("overmap");  
   if (omOpen) {  
     const pcx = Math.floor(player.x / CHUNK_SIZE), pcz = Math.floor(player.z / CHUNK_SIZE);  
     const RAD = 14;  
