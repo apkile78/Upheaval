@@ -3,7 +3,7 @@ import { CHUNK_SIZE, STAIRS, loadBuildings } from "./world/world.js";
 import { beginFrame, setViewProj, draw, quad, floorTex, wallTex, whiteTex } from "./gl/renderer.js";  
 import { player, world, collides, worldSeed, inventory } from "./player.js";  
 import { cameraEye } from "./camera.js";  
-import { keys, invOpen, invSel, omOpen } from "./input.js";  
+import { keys, invOpen, invSel, omOpen, omPanX, omPanZ } from "./input.js";
 import { entities, spawnItem, spawnMob, spawnFollower, attack, updateEntities, loadData, MONSTERS, ITEMS } from "./entities.js";  
 import { chunkSpawns, buildingAt, biomeAt } from "./world/overmap.js";
 const RADIUS = 3;  
@@ -147,27 +147,27 @@ function render() {
       (lines.length ? lines.join("\n") : "(empty)");  
   }
 
-const om = document.getElementById("overmap");  
+  const om = document.getElementById("overmap");  
   if (omOpen) {  
     const pcx = Math.floor(player.x / CHUNK_SIZE), pcz = Math.floor(player.z / CHUNK_SIZE);  
-    const RAD = 14;  
-    let s = "OVERMAP (M close)   @ you   H house  M milbase   # city  ^ forest  . field\n\n";  
+    const ccx = pcx + omPanX, ccz = pcz + omPanZ;   // view center = you + pan  
+    const RAD = 20;                                  // bump for a bigger map  
+    let s = "OVERMAP (M close, arrows pan)  @ you  H house  M milbase  # city  ^ forest  . field\n\n";  
     for (let dz = -RAD; dz <= RAD; dz++) {  
       let row = "";  
       for (let dx = -RAD; dx <= RAD; dx++) {  
-        const cx = pcx + dx, cz = pcz + dz;  
-        if (!dx && !dz) { row += "@"; continue; }  
+        const cx = ccx + dx, cz = ccz + dz;  
+        if (cx === pcx && cz === pcz) { row += "@"; continue; }  
         const b = buildingAt(worldSeed, cx, cz);  
         if (b) { row += b.id === "milbase" ? "M" : "H"; continue; }  
         const bi = biomeAt(worldSeed, cx, cz);  
         row += bi === "city" ? "#" : bi === "forest" ? "^" : ".";  
       }  
-      s += row + "\n";  
-    }  
-    om.textContent = s;  
-    }
-  
+    s += row + "\n";  
   }  
+  om.textContent = s;  
+}
+}  
   
 // ---------- fixed-timestep loop ----------  
 const STEP = 1 / 60;  
