@@ -2,7 +2,7 @@ import { chunkRng, valueNoise2D } from "./rng.js";
 import { loadDiff, saveDiff } from "./storage.js";  
   
 // ---------- constants ----------  
-export const CHUNK_SIZE = 16;  
+export const CHUNK_SIZE = 32;  
 export const N_LAYERS = 8;             // capped vertical stack (milestone 6, option A)  
 const AREA = CHUNK_SIZE * CHUNK_SIZE;  
   
@@ -11,23 +11,42 @@ export const AIR = 0;
 export const FLOOR = 1;  
 export const WALL = 2;  
 export const STAIRS = 3;  
+export const TREE = 4;
   
 // ---------- generation ----------  
-// Returns an array of N_LAYERS Uint8Arrays (one 2D layer each).  
 export function generateChunkTiles(seed, cx, cz) {  
   const layers = [];  
-  for (let L = 0; L < N_LAYERS; L++) layers.push(new Uint8Array(AREA)); // AIR=0  
-  
+  for (let L = 0; L < N_LAYERS; L++) layers.push(new Uint8Array(AREA));  
+  const rng = chunkRng(seed, cx, cz);  
   const l0 = layers[0];  
   
-  for (let i = 0; i < AREA; i++) {  
-    l0[i] = FLOOR;   // flat plane: floor everywhere, no walls  
-  }
+  for (let lz = 0; lz < CHUNK_SIZE; lz++) {  
+    for (let lx = 0; lx < CHUNK_SIZE; lx++) {  
+      const wx = cx * CHUNK_SIZE + lx;  
+      const wz = cz * CHUNK_SIZE + lz;  
+      const i = lz * CHUNK_SIZE + lx;  
+      l0[i] = FLOOR;  
   
+      // low-frequency biome field -> smooth bands (autocorrelated)  
+      const b = valueNoise2D(seed, wx * 0.02, wz * 0.02);  
+      if (b >= 0.40 && b < 0.68) {  
+        // forest: scatter trees, denser toward the band center  
+        const density = 1 - Math.abs((b - 0.54) / 0.14); // 0..1  
+        if (rng() < 0.05 + 0.20 * density) l0[i] = TREE;  
+      }  
+      // b < 0.40 = field (bare floor); b >= 0.68 = city (buildings below)  
+    }  
+  }  
   return layers;  
-}  
+}
   
-// ---------- world ----------  
+// ---------- world ---------- 
+//---solid trees---
+isSolid(tx, tz, level) {  
+  const t = this.getTile(tx, tz, level);  
+  return t === WALL || t === TREE;  
+}
+
 export class World {  
   constructor(seed, gl, makeMesh) {  
     this.seed = seed >>> 0;  
@@ -139,7 +158,7 @@ export class World {
           pushQuad(stairs, [[x+1,0,z,0,0],[x+1,0,z+1,1,0],[x+1,y1,z+1,1,1],[x+1,y1,z,0,1]], 0.6);  
         }  
   
-        if (t === WALL) {  
+        if (t === WALL || t == TREE) {  
           // top face -> separate roof mesh so it can be hidden on the current floor  
           pushQuad(roof, [[x,1,z,0,0],[x+1,1,z,1,0],[x+1,1,z+1,1,1],[x,1,z+1,0,1]], 1.0);  
           // exposed side faces only (cull against solid neighbours in same layer)  
