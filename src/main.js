@@ -3,9 +3,7 @@ import { CHUNK_SIZE, STAIRS } from "./world/world.js";
 import { beginFrame, setViewProj, draw, quad, floorTex, wallTex, whiteTex } from "./gl/renderer.js";  
 import { player, world, collides, worldSeed, inventory } from "./player.js";  
 import { cameraEye } from "./camera.js";  
-import { keys, invOpen, invSel } from "./input.js";  
-import { entities, spawnItem, spawnMob, spawnFollower, attack, updateEntities, loadData, MONSTERS, ITEMS } from "./entities.js";
-import { chunkSpawns, buildingAt, biomeAt } from "./world/overmap.js";
+import { keys, invOpen, invSel, omOpen } from "./input.js";
 const RADIUS = 3;  
 const LAYER_H = 1.0;    // vertical spacing between floors  
 const BAND_BELOW = 2;   // floors below current one to draw (dimmed)    
