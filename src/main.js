@@ -1,5 +1,5 @@
 import * as m4 from "./math/mat4.js";  
-import { CHUNK_SIZE, STAIRS } from "./world/world.js";  
+import { CHUNK_SIZE, STAIRS, loadBuildings } from "./world/world.js";  
 import { beginFrame, setViewProj, draw, quad, floorTex, wallTex, whiteTex } from "./gl/renderer.js";  
 import { player, world, collides, worldSeed, inventory } from "./player.js";  
 import { cameraEye } from "./camera.js";  
@@ -182,9 +182,8 @@ function frame(now) {
   requestAnimationFrame(frame);  
 }  
 
-loadData().then(() => {  
+Promise.all([loadData(), loadBuildings()]).then(() => {  
   spawnFollower(player.x - 3, player.z, player.level);  
-  spawnItem(player.x + 2, player.z, player.level, "scrap");
   spawnItem(player.x + 3, player.z + 1, player.level, "apple");  
   spawnItem(player.x + 4, player.z - 1, player.level, "water");
   spawnMob(player.x + 5, player.z + 3, player.level, "zombie");  
