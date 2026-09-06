@@ -44,20 +44,17 @@ export function generateChunkTiles(seed, cx, cz) {
   const rng = chunkRng(seed, cx, cz);  
   const l0 = layers[0];  
   const biome = biomeAt(seed, cx, cz);  
+  const isRoad = buildRoadTester(seed, cx, cz);  
   
   for (let lz = 0; lz < CHUNK_SIZE; lz++) {  
     for (let lx = 0; lx < CHUNK_SIZE; lx++) {  
       const wx = cx * CHUNK_SIZE + lx, wz = cz * CHUNK_SIZE + lz;  
       const i = lz * CHUNK_SIZE + lx;  
       l0[i] = FLOOR;  
-      if (isRoadTile(wx, wz, biome)) { l0[i] = ROAD; continue; }  // roads override ground  
-      const b = valueNoise2D(seed, wx * 0.02, wz * 0.02);  
-      if (b >= 0.40 && b < 0.68) {  
-        const density = 1 - Math.abs((b - 0.54) / 0.14);  
-        if (biome === "forest" && rng() < 0.25) l0[i] = TREE;  
-      }  
+      if (isRoad(wx, wz)) { l0[i] = ROAD; continue; }   // roads override ground  
+      if (biome === "forest" && rng() < 0.18) l0[i] = TREE;  
     }  
-  }  
+  }
   
   const bld = buildingAt(seed, cx, cz);  
   if (bld && TEMPLATES.data && TEMPLATES.data[bld.id]) {  
