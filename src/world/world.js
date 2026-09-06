@@ -158,7 +158,7 @@ export class World {
   
   // build geometry (floats: x,y,z, u,v, shade) for one layer of one chunk  
   buildLayerMeshData(c, level) {  
-    const floor = [], wall = [], stairs = [], roof = [], furnGeo = [];
+    const floor = [], wall = [], stairs = [], roof = [], furnGeo = [], road = [];
     const tiles = c.tiles[level];  
     
     const baseX = c.cx * CHUNK_SIZE, baseZ = c.cz * CHUNK_SIZE;  
@@ -183,15 +183,12 @@ export class World {
             pushQuad(furnGeo, [[x,y1,z,0,0],[x+1,y1,z,1,0],[x+1,y1,z+1,1,1],[x,y1,z+1,0,1]], 1.0);  
         }
         
-        if (t === FLOOR || t === STAIRS || t === ROAD) {  
-          // flat floor quad slightly above 0 to avoid z-fighting  
-          pushQuad(floor, [  
-            [x,     0.02, z    , 0, 0],  
-            [x + 1, 0.02, z    , 1, 0],  
-            [x + 1, 0.02, z + 1, 1, 1],  
-            [x,     0.02, z + 1, 0, 1],  
-          ], 1.0);  
+        if (t === FLOOR || t === STAIRS) {  
+          pushQuad(floor, [[x,0.02,z,0,0],[x+1,0.02,z,1,0],[x+1,0.02,z+1,1,1],[x,0.02,z+1,0,1]], 1.0);  
         }  
+        if (t === ROAD) {  
+          pushQuad(road, [[x,0.03,z,0,0],[x+1,0.03,z,1,0],[x+1,0.03,z+1,1,1],[x,0.03,z+1,0,1]], 1.0);  
+        }
   
         if (t === STAIRS) {  
           // short marker box (0..0.5) so stairs are visible; tinted yellow in draw()  
@@ -227,6 +224,8 @@ export class World {
       roofMesh: this.makeMesh(new Float32Array(roof)),  
       stairsMesh: this.makeMesh(new Float32Array(stairs)),  
       furnMesh:   this.makeMesh(new Float32Array(furnGeo)),
+      roadMesh: this.makeMesh(new Float32Array(road)),
+      
     };  
   }  
   
