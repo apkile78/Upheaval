@@ -1,5 +1,6 @@
 import { chunkRng, valueNoise2D } from "./rng.js";  
-import { loadDiff, saveDiff } from "./storage.js";  
+import { loadDiff, saveDiff } from "./storage.js"; 
+import { buildingAt } from "./overmap.js";
   
 // ---------- constants ----------  
 export const CHUNK_SIZE = 32;  
@@ -43,26 +44,24 @@ export function generateChunkTiles(seed, cx, cz) {
       }  
     }  
   }  
-  
   // TEMP Stage-1 proof: stamp a 6x5 house at local (4,4) on this chunk only if cx===0 && cz===0  
   if (cx === 0 && cz === 0) stampHouse(layers[0], furn[0]);  
+  
+  const bld = buildingAt(seed, cx, cz);  
+  if (bld && bld.id === "house") stampHouse(l0, WALL, FLOOR);  
+  return layers;
   
   return { layers, furn };  
 }
 
-function stampHouse(l0, f0) {  
-  const ox = 4, oz = 4, w = 6, h = 5;  
-  for (let z = 0; z < h; z++)  
-    for (let x = 0; x < w; x++) {  
-      const i = (oz + z) * CHUNK_SIZE + (ox + x);  
-      const edge = x === 0 || z === 0 || x === w - 1 || z === h - 1;  
-      l0[i] = edge ? WALL : FLOOR;  
+function stampHouse(l0, WALL, FLOOR) {  
+  const x0 = 12, z0 = 12, w = 8, h = 8;   // 8x8 house centered-ish in a 32 chunk  
+  for (let z = z0; z < z0 + h; z++)  
+    for (let x = x0; x < x0 + w; x++) {  
+      const edge = (x === x0 || x === x0 + w - 1 || z === z0 || z === z0 + h - 1);  
+      l0[z * CHUNK_SIZE + x] = edge ? WALL : FLOOR;  
     }  
-  // doorway  
-  l0[(oz + h - 1) * CHUNK_SIZE + (ox + 2)] = FLOOR;  
-  // fridge + counter inside  
-  f0[(oz + 1) * CHUNK_SIZE + (ox + 1)] = F_FRIDGE;  
-  f0[(oz + 1) * CHUNK_SIZE + (ox + 2)] = F_COUNTER;  
+  l0[(z0 + h - 1) * CHUNK_SIZE + (x0 + w / 2)] = FLOOR;   // doorway on south wall  
 }
   
 // ---------- world ---------- 
