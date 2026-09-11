@@ -8,10 +8,15 @@
  * Fixed-timestep simulation loop (60 Hz) driving the WebGL render pipeline.
  */
 
+import { CollisionResolver } from './sim/physics/collision'
+import { raycastTiles } from './sim/physics/raycast'
 import { ChunkManager } from './sim/world/chunkManager'
+import { EntityManager } from './sim/ecs/entityManager'
+import { EntityRenderer } from './render/entityRenderer'
 import type { ChunkCoordinate } from './types/world'
 import type { PlayerState } from './types/player'
-import { initRender, renderFrame } from './render/canvas'
+import { initRender, renderFrame, scene } from './render/canvas'
+import { selectionBox } from './render/selectionBox'
 
 /** Simulation timestep (60 Hz). */
 const FIXED_DT = 1 / 60
@@ -31,8 +36,18 @@ let chunkManager!: ChunkManager
 /** Singleton render controller. */
 let cameraController!: ReturnType<typeof initRender>
 
+/** Collision resolver for player movement. */
+let collisionResolver!: CollisionResolver
+
 /** Current player state. */
 let player!: PlayerState
+
+/** ECS Entity Manager. */
+let entityManager!: EntityManager
+
+/** Entity Renderer for syncing ECS entities to Three.js meshes. */
+let entityRenderer!: EntityRenderer
+
 
 // ---------------------------------------------------------------------------
 // Initial state construction
@@ -101,22 +116,34 @@ function updatePlayer(dt: number): void {
   const sinY = Math.sin(yaw)
   const cosY = Math.cos(yaw)
 
-  // WASD / Arrow keys for forward/backward/strafe
+  // Compute desired movement delta
+  let dx = 0, dz = 0
   if (keys.has('w') || keys.has('arrowup')) {
-    player.transform.position.x += sinY * speed
-    player.transform.position.z += cosY * speed
+    dx += sinY * speed
+    dz += cosY * speed
   }
   if (keys.has('s') || keys.has('arrowdown')) {
-    player.transform.position.x -= sinY * speed
-    player.transform.position.z -= cosY * speed
+    dx -= sinY * speed
+    dz -= cosY * speed
   }
   if (keys.has('a') || keys.has('arrowleft')) {
-    player.transform.position.x -= cosY * speed
-    player.transform.position.z += sinY * speed
+    dx -= cosY * speed
+    dz += sinY * speed
   }
   if (keys.has('d') || keys.has('arrowright')) {
-    player.transform.position.x += cosY * speed
-    player.transform.position.z -= sinY * speed
+    dx += cosY * speed
+    dz -= sinY * speed
+  }
+
+  // Apply collision resolution to movement delta
+  if (dx !== 0 || dz !== 0) {
+    const delta = { x: dx, y: 0, z: dz }
+    const resolved = collisionResolver.resolveMovement(
+      player.transform.position,
+      delta,
+      chunkManager.getActiveChunks(),
+    )
+    player.transform.position = resolved
   }
 
   // Q / E for yaw
@@ -132,6 +159,39 @@ function updateChunks(): void {
     z: Math.floor(pos.z / 16),
   }
   chunkManager.updateActiveChunks(center, 2)
+}
+
+// ---------------------------------------------------------------------------
+// Target tile raycasting (updated every render frame)
+// ---------------------------------------------------------------------------
+
+const RAYCAST_MAX_DISTANCE = 50;
+
+function updateTargetTile(): void {
+  const pos = player.transform.position;
+  const rot = player.transform.rotation;
+
+  // Build view direction from player yaw (and pitch if available)
+  const yaw = rot.y;
+  const pitch = rot.x || 0;
+
+  const dirX = Math.sin(yaw) * Math.cos(pitch);
+  const dirY = Math.sin(pitch);
+  const dirZ = Math.cos(yaw) * Math.cos(pitch);
+
+  const ray = {
+    origin: { x: pos.x, y: pos.y + 1.7, z: pos.z },
+    direction: { x: dirX, y: dirY, z: dirZ },
+  };
+
+  const hit = raycastTiles(ray, RAYCAST_MAX_DISTANCE, chunkManager);
+
+  if (hit && hit.hit) {
+    // Update selection box to show targeted tile
+    selectionBox.updatePosition(hit.tileCoord.x, hit.tileCoord.y, hit.tileCoord.z);
+  } else {
+    selectionBox.hide();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -157,6 +217,12 @@ function gameLoopTick(nowMs: number): void {
     accumulator -= FIXED_DT
   }
 
+  // Update target tile via raycast
+  updateTargetTile()
+
+  // Update entity renderer (sync ECS entities to meshes)
+  entityRenderer.update()
+
   // Render every frame with latest state
   renderFrame(player)
 
@@ -175,13 +241,25 @@ function init(): void {
   // 2. Player state
   player = createInitialPlayer()
 
-  // 3. Render - mount WebGL canvas into #app
+  // 3. Collision resolver
+  collisionResolver = new CollisionResolver()
+
+  // 4. ECS Entity Manager
+  entityManager = new EntityManager()
+
+  // 5. Render - mount WebGL canvas into #app
   const app = document.getElementById('app')
   if (app === null) throw new Error('No #app element found in DOM')
   cameraController = initRender(app)
   cameraController.setMode(player.cameraMode)
 
-  // 4. Kick off loop
+  // 6. Entity Renderer
+  entityRenderer = new EntityRenderer(entityManager, scene)
+
+  // Add selection box to scene
+  scene.add(selectionBox.meshRef)
+
+  // 7. Kick off loop
   lastTime = performance.now()
   requestAnimationFrame(gameLoopTick)
 }
