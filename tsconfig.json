@@ -1,17 +1,16 @@
 {
-  "name": "cdda-3d-engine",
-  "version": "0.1.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "type-check": "tsc --noEmit"
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "esModuleInterop": true,
+    "outDir": "./dist",
+    "rootDir": "./src"
   },
-  "dependencies": {
-    "localforage": "^1.10.0"
-  },
-  "devDependencies": {
-    "typescript": "^5.3.0",
-    "vite": "^5.0.0"
-  }
+  "include": ["src/**/*"]
 }

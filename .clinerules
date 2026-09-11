@@ -8,3 +8,4 @@ Plan Mode Instructions: Force the agent to write out an architectural plan, list
 Act Mode Instructions: Instruct the agent to strictly follow approved steps, output small diffs, and run npm run type-check immediately after writing code.
 ask me if I want to git commit or create a Git stash before executing any complex prompt.
 If things are looking very bad (broken), ask me if I want to run a git reset --hard to instantly restore a working state instead of debugging
+For using terminal commands, give commands 10 seconds only, after ten seconds read the output and proceed while running.

@@ -1,3 +1,6 @@
+> **PROPRIETARY & ALL RIGHTS RESERVED**  
+> Copyright (c) 2026 [Your Name]. All rights reserved.  
+> Unlawful copying, modification, or distribution of any code or assets in this repository is strictly prohibited.
 # Project Overview & Architecture Documentation
 
 Welcome to the Technical Documentation for the 3D CDDA-inspired Survival Simulation Game.
