@@ -18,6 +18,8 @@ import { CollisionResolver } from '../../../sim/physics/collision';
  */
 export class MovementSystem {
   private resolver: CollisionResolver;
+  /** Scratch delta vector to avoid per-entity allocation. */
+  private scratchDelta: Vector3D = { x: 0, y: 0, z: 0 };
 
   constructor() {
     this.resolver = new CollisionResolver();
@@ -47,12 +49,11 @@ export class MovementSystem {
       if (!transform || !collision) continue;
       if (!collision.isSolid) continue;
 
-      // Calculate movement delta from velocity
-      const delta: Vector3D = {
-        x: transform.velocity.x * dt,
-        y: transform.velocity.y * dt,
-        z: transform.velocity.z * dt,
-      };
+      // Calculate movement delta from velocity (reuse scratch)
+      const delta = this.scratchDelta;
+      delta.x = transform.velocity.x * dt;
+      delta.y = transform.velocity.y * dt;
+      delta.z = transform.velocity.z * dt;
 
       // Skip if no movement
       if (delta.x === 0 && delta.y === 0 && delta.z === 0) continue;

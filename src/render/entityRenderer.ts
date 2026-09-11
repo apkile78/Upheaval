@@ -68,8 +68,10 @@ export class EntityRenderer {
   private scene: Scene;
   /** Map from entity ID to Three.js Mesh */
   private meshes = new Map<Entity, Mesh>();
-  /** Set of entities visible last frame (for efficient updates) */
-  private lastVisible = new Set<Entity>();
+  /** Reusable set for tracking visible entities (avoid per-frame allocation). */
+  private visibleSet = new Set<Entity>();
+  /** Swap set for double-buffered visible tracking. */
+  private prevVisibleSet = new Set<Entity>();
 
   constructor(entityManager: EntityManager, scene: Scene) {
     this.entityManager = entityManager;
@@ -84,7 +86,12 @@ export class EntityRenderer {
     // Query entities with both Transform and Renderable components
     const entities = this.entityManager.queryEntities(['Transform', 'Renderable']);
 
-    const currentVisible = new Set<Entity>();
+    // Swap visible sets (reuse allocations)
+    const current = this.visibleSet;
+    current.clear();
+    const prev = this.prevVisibleSet;
+    this.prevVisibleSet = current;
+    this.visibleSet = prev;
 
     for (const entity of entities) {
       const transform = this.entityManager.getComponent<TransformComponent>(entity, 'Transform');
@@ -93,7 +100,7 @@ export class EntityRenderer {
       if (!transform || !renderable) continue;
       if (!renderable.visible) continue;
 
-      currentVisible.add(entity);
+      current.add(entity);
 
       // Get or create mesh for this entity
       let mesh = this.meshes.get(entity);
@@ -106,7 +113,7 @@ export class EntityRenderer {
 
       // Update mesh transform
       mesh.position.set(transform.position.x, transform.position.y, transform.position.z);
-      
+
       // Apply rotation (yaw around Y axis, pitch around X axis)
       mesh.rotation.set(transform.rotation.x || 0, transform.rotation.y || 0, 0);
 
@@ -117,12 +124,10 @@ export class EntityRenderer {
 
     // Destroy meshes for entities that are no longer visible/renderable
     for (const [entity, mesh] of this.meshes) {
-      if (!currentVisible.has(entity)) {
+      if (!current.has(entity)) {
         this.destroyMesh(entity, mesh);
       }
     }
-
-    this.lastVisible = currentVisible;
   }
 
   /**
@@ -165,7 +170,8 @@ export class EntityRenderer {
       this.scene.remove(mesh);
     }
     this.meshes.clear();
-    this.lastVisible.clear();
+    this.visibleSet.clear();
+    this.prevVisibleSet.clear();
   }
 
   /**

@@ -20,6 +20,7 @@ import type { ChunkCoordinate } from './types/world'
 import type { PlayerState } from './types/player'
 import { initRender, renderFrame, scene } from './render/canvas'
 import { selectionBox } from './render/selectionBox'
+import { HUDManager } from './render/ui/hudManager'
 
 /** Simulation timestep (60 Hz). */
 const FIXED_DT = 1 / 60
@@ -44,6 +45,9 @@ let entityRenderer!: EntityRenderer
 
 /** Player entity ID in ECS. */
 let playerEntity!: Entity
+
+/** HUD Manager for UI overlays. */
+let hudManager!: HUDManager
 
 
 // ---------------------------------------------------------------------------
@@ -148,6 +152,9 @@ function gameLoopTick(nowMs: number): void {
     accumulator -= FIXED_DT
   }
 
+  // Sync HUD health display
+  hudManager.updateHealth(player.health, player.maxHealth)
+
   // Update target tile via raycast
   updateTargetTile()
 
@@ -204,13 +211,16 @@ function init(): void {
   initInput()
   initCameraSwitching()
 
-  // 7. Register simulation event handlers
+  // 7. Initialize HUD and register event handlers
+  hudManager = new HUDManager()
+  hudManager.updateHealth(player.health, player.maxHealth)
+
   simulation.on({
     onItemPickup: (event) => {
-      console.log(`Picked up ${event.itemId} at`, event.position)
+      hudManager.showPickupNotification(event.itemId)
     },
     onDeath: (event) => {
-      console.log(`Entity ${event.entity} died at`, event.position)
+      hudManager.showDeathNotification(`Entity ${event.entity}`)
     },
   })
 

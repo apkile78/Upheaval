@@ -50,6 +50,8 @@ export class InteractionSystem {
   private spatialGrid: SpatialHashGrid;
   private pickupRadius: number;
   private pickupCallbacks: ItemPickupCallback[] = [];
+  /** Scratch array to avoid per-call allocation. */
+  private scratchPos: [number, number, number] = [0, 0, 0];
 
   constructor(
     entityManager: EntityManager,
@@ -79,11 +81,10 @@ export class InteractionSystem {
     const playerTransform = this.entityManager.getComponent<TransformComponent>(playerEntity, 'Transform');
     if (!playerTransform) return;
 
-    const playerPos: [number, number, number] = [
-      playerTransform.position.x,
-      playerTransform.position.y,
-      playerTransform.position.z,
-    ];
+    const playerPos = this.scratchPos;
+    playerPos[0] = playerTransform.position.x;
+    playerPos[1] = playerTransform.position.y;
+    playerPos[2] = playerTransform.position.z;
 
     // Query nearby entities using spatial hash grid
     const nearby = this.spatialGrid.queryRadius(playerPos, this.pickupRadius);

@@ -17,20 +17,35 @@ const HALF_H = 0.9;
 const HALF_D = 0.2;
 
 export class CollisionResolver {
+  /** Scratch vectors to avoid per-call allocations. */
+  private scratchCand: Vector3D = { x: 0, y: 0, z: 0 };
+  private scratchAfterX: Vector3D = { x: 0, y: 0, z: 0 };
+  private scratchAfterY: Vector3D = { x: 0, y: 0, z: 0 };
+  private scratchResult: Vector3D = { x: 0, y: 0, z: 0 };
+
   resolveMovement(
     currentPos: Vector3D,
     delta: Vector3D,
     chunks: WorldChunk[],
   ): Vector3D {
-    if (delta.x === 0 && delta.y === 0 && delta.z === 0) return { ...currentPos };
-    const cand = { x: currentPos.x + delta.x, y: currentPos.y + delta.y, z: currentPos.z + delta.z };
+    if (delta.x === 0 && delta.y === 0 && delta.z === 0) {
+      const r = this.scratchResult;
+      r.x = currentPos.x; r.y = currentPos.y; r.z = currentPos.z;
+      return r;
+    }
+    const cand = this.scratchCand;
+    cand.x = currentPos.x + delta.x; cand.y = currentPos.y + delta.y; cand.z = currentPos.z + delta.z;
     if (!this.testPosition(cand, chunks)) return cand;
     const rx = this.testAxisDelta(currentPos, delta, 'x', chunks);
-    const afterX: Vector3D = { x: rx.x, y: currentPos.y, z: currentPos.z };
+    const afterX = this.scratchAfterX;
+    afterX.x = rx.x; afterX.y = currentPos.y; afterX.z = currentPos.z;
     const ry = this.testAxisDelta(afterX, delta, 'y', chunks);
-    const afterY: Vector3D = { x: afterX.x, y: ry.y, z: afterX.z };
+    const afterY = this.scratchAfterY;
+    afterY.x = afterX.x; afterY.y = ry.y; afterY.z = afterX.z;
     const rz = this.testAxisDelta(afterY, delta, 'z', chunks);
-    return { x: afterY.x, y: afterY.y, z: rz.z };
+    const result = this.scratchResult;
+    result.x = afterY.x; result.y = afterY.y; result.z = rz.z;
+    return result;
   }
 
   private testPosition(pos: Vector3D, chunks: WorldChunk[]): boolean {
@@ -38,20 +53,35 @@ export class CollisionResolver {
     return false;
   }
 
+  /** Scratch for testAxisDelta to avoid per-call allocations. */
+  private scratchProp: Vector3D = { x: 0, y: 0, z: 0 };
+  private scratchCur: Vector3D = { x: 0, y: 0, z: 0 };
+  private scratchReturn: Vector3D = { x: 0, y: 0, z: 0 };
+
   private testAxisDelta(startPos: Vector3D, delta: Vector3D, axis: 'x'|'y'|'z', chunks: WorldChunk[]): Vector3D {
-    if (delta[axis] === 0) return { ...startPos };
+    if (delta[axis] === 0) {
+      const r = this.scratchReturn;
+      r.x = startPos.x; r.y = startPos.y; r.z = startPos.z;
+      return r;
+    }
     const sign = Math.sign(delta[axis]);
-    const maxStep = Math.abs(delta[axis]);
-    const stepSize = maxStep / 4;
-    let cur = { ...startPos };
+    const stepSize = Math.abs(delta[axis]) / 4;
+    const cur = this.scratchCur;
+    cur.x = startPos.x; cur.y = startPos.y; cur.z = startPos.z;
+    const prop = this.scratchProp;
     for (let s = 0; s < 4; s++) {
-      const prop: Vector3D = { x: cur.x, y: cur.y, z: cur.z };
+      prop.x = cur.x; prop.y = cur.y; prop.z = cur.z;
       prop[axis] = cur[axis] + sign * stepSize;
       if (this.testPosition(prop, chunks)) return cur;
-      cur = prop;
+      cur.x = prop.x; cur.y = prop.y; cur.z = prop.z;
     }
     return cur;
   }
+
+  /** Pre-allocated check coordinates to avoid per-call array allocation. */
+  private checkX: Int32Array = new Int32Array(5);
+  private checkY: Int32Array = new Int32Array(5);
+  private checkZ: Int32Array = new Int32Array(5);
 
   private checkTileAtPosition(pos: Vector3D, chunk: WorldChunk): boolean {
     const tiles = chunk.tiles;
@@ -62,15 +92,14 @@ export class CollisionResolver {
     const fZ = pos.z - HALF_D, hZ = pos.z + HALF_D;
     const fY = pos.y - HALF_H, hY = pos.y + HALF_H;
     const lX = pos.x - HALF_W, rX = pos.x + HALF_W;
-    const checks = [
-      [Math.floor(lX-cMX), Math.floor(fY-cMY), Math.floor(fZ-cMZ)],
-      [Math.floor(rX-cMX), Math.floor(fY-cMY), Math.floor(fZ-cMZ)],
-      [Math.floor(lX-cMX), Math.floor(hY-cMY), Math.floor(hZ-cMZ)],
-      [Math.floor(rX-cMX), Math.floor(hY-cMY), Math.floor(hZ-cMZ)],
-      [Math.floor(pos.x-cMX), Math.floor((fY+hY)/2-cMY), Math.floor((fZ+hZ)/2-cMZ)],
-    ];
-    for (const [x,y,z] of checks) {
-      const t = this.getTileAt(tiles, x, y, z);
+    const cx = this.checkX, cy = this.checkY, cz = this.checkZ;
+    cx[0] = Math.floor(lX-cMX); cy[0] = Math.floor(fY-cMY); cz[0] = Math.floor(fZ-cMZ);
+    cx[1] = Math.floor(rX-cMX); cy[1] = Math.floor(fY-cMY); cz[1] = Math.floor(fZ-cMZ);
+    cx[2] = Math.floor(lX-cMX); cy[2] = Math.floor(hY-cMY); cz[2] = Math.floor(hZ-cMZ);
+    cx[3] = Math.floor(rX-cMX); cy[3] = Math.floor(hY-cMY); cz[3] = Math.floor(hZ-cMZ);
+    cx[4] = Math.floor(pos.x-cMX); cy[4] = Math.floor((fY+hY)/2-cMY); cz[4] = Math.floor((fZ+hZ)/2-cMZ);
+    for (let i = 0; i < 5; i++) {
+      const t = this.getTileAt(tiles, cx[i], cy[i], cz[i]);
       if (t && this.isImpassable(t, pos)) return true;
     }
     return false;

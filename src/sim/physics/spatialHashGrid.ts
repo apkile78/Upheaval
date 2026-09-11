@@ -28,6 +28,9 @@ export class SpatialHashGrid {
   private entityCell: Map<Entity, string> = new Map();
   private queryResult: SpatialQueryEntry[] = [];
   private seenEntities: Set<Entity> = new Set();
+  /** Scratch cell coord to avoid allocation in query loop. */
+  private scratchMin: CellCoordinate = { x: 0, y: 0, z: 0 };
+  private scratchMax: CellCoordinate = { x: 0, y: 0, z: 0 };
 
   constructor(cellSize: number = 8.0) {
     this.cellSize = cellSize;
@@ -77,11 +80,18 @@ export class SpatialHashGrid {
     const result = this.queryResult;
     result.length = 0;
     this.seenEntities.clear();
-    const minCell = this.getCellCoord(position[0] - radius, position[1] - radius, position[2] - radius);
-    const maxCell = this.getCellCoord(position[0] + radius, position[1] + radius, position[2] + radius);
-    for (let x = minCell.x; x <= maxCell.x; x++) {
-      for (let y = minCell.y; y <= maxCell.y; y++) {
-        for (let z = minCell.z; z <= maxCell.z; z++) {
+    const inv = this.inverseCellSize;
+    const min = this.scratchMin;
+    const max = this.scratchMax;
+    min.x = Math.floor((position[0] - radius) * inv);
+    min.y = Math.floor((position[1] - radius) * inv);
+    min.z = Math.floor((position[2] - radius) * inv);
+    max.x = Math.floor((position[0] + radius) * inv);
+    max.y = Math.floor((position[1] + radius) * inv);
+    max.z = Math.floor((position[2] + radius) * inv);
+    for (let x = min.x; x <= max.x; x++) {
+      for (let y = min.y; y <= max.y; y++) {
+        for (let z = min.z; z <= max.z; z++) {
           const cell = this.cells.get(this.coordToKey({ x, y, z }));
           if (!cell) continue;
           for (const entry of cell) {
@@ -106,12 +116,19 @@ export class SpatialHashGrid {
   getCellCount(): number { return this.cells.size; }
 
   private insertWithRadius(entity: Entity, position: [number, number, number], radius: number): void {
-    const minCell = this.getCellCoord(position[0] - radius, position[1] - radius, position[2] - radius);
-    const maxCell = this.getCellCoord(position[0] + radius, position[1] + radius, position[2] + radius);
+    const inv = this.inverseCellSize;
+    const min = this.scratchMin;
+    const max = this.scratchMax;
+    min.x = Math.floor((position[0] - radius) * inv);
+    min.y = Math.floor((position[1] - radius) * inv);
+    min.z = Math.floor((position[2] - radius) * inv);
+    max.x = Math.floor((position[0] + radius) * inv);
+    max.y = Math.floor((position[1] + radius) * inv);
+    max.z = Math.floor((position[2] + radius) * inv);
     const primaryKey = this.getKey(position);
-    for (let x = minCell.x; x <= maxCell.x; x++) {
-      for (let y = minCell.y; y <= maxCell.y; y++) {
-        for (let z = minCell.z; z <= maxCell.z; z++) {
+    for (let x = min.x; x <= max.x; x++) {
+      for (let y = min.y; y <= max.y; y++) {
+        for (let z = min.z; z <= max.z; z++) {
           this.addEntry(this.coordToKey({ x, y, z }), entity, position);
         }
       }
@@ -129,11 +146,8 @@ export class SpatialHashGrid {
     return `${Math.floor(position[0] * this.inverseCellSize)},${Math.floor(position[1] * this.inverseCellSize)},${Math.floor(position[2] * this.inverseCellSize)}`;
   }
 
-  private getCellCoord(x: number, y: number, z: number): CellCoordinate {
-    return { x: Math.floor(x * this.inverseCellSize), y: Math.floor(y * this.inverseCellSize), z: Math.floor(z * this.inverseCellSize) };
-  }
 
   private coordToKey(coord: CellCoordinate): string {
-    return `${coord.x},${coord.y},${coord.z}`;
+    return coord.x + ',' + coord.y + ',' + coord.z;
   }
 }
