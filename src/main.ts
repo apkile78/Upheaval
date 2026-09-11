@@ -11,8 +11,11 @@
 import { CollisionResolver } from './sim/physics/collision'
 import { raycastTiles } from './sim/physics/raycast'
 import { ChunkManager } from './sim/world/chunkManager'
-import { EntityManager } from './sim/ecs/entityManager'
+import { Simulation } from './sim/simulation'
 import { EntityRenderer } from './render/entityRenderer'
+import { createPlayerEntity, syncPlayerEntity } from './sim/player'
+import { initInput, updatePlayerMovement } from './sim/playerController'
+import type { Entity } from './types/ecs'
 import type { ChunkCoordinate } from './types/world'
 import type { PlayerState } from './types/player'
 import { initRender, renderFrame, scene } from './render/canvas'
@@ -20,15 +23,6 @@ import { selectionBox } from './render/selectionBox'
 
 /** Simulation timestep (60 Hz). */
 const FIXED_DT = 1 / 60
-
-/** Player movement speed (world units per second). */
-const MOVE_SPEED = 8
-
-/** Player yaw rotation speed (radians per second). */
-const LOOK_SPEED = Math.PI
-
-/** Held keys (lowercase). */
-const keys = new Set<string>()
 
 /** Singleton simulation manager. */
 let chunkManager!: ChunkManager
@@ -42,11 +36,14 @@ let collisionResolver!: CollisionResolver
 /** Current player state. */
 let player!: PlayerState
 
-/** ECS Entity Manager. */
-let entityManager!: EntityManager
+/** Simulation orchestrator. */
+let simulation!: Simulation
 
 /** Entity Renderer for syncing ECS entities to Three.js meshes. */
 let entityRenderer!: EntityRenderer
+
+/** Player entity ID in ECS. */
+let playerEntity!: Entity
 
 
 // ---------------------------------------------------------------------------
@@ -75,81 +72,12 @@ function createInitialPlayer(): PlayerState {
 }
 
 // ---------------------------------------------------------------------------
-// Input handling
 // ---------------------------------------------------------------------------
 
-window.addEventListener('keydown', (e: KeyboardEvent): void => {
-  keys.add(e.key.toLowerCase())
-
-  // Camera view switching: 1 = first-person, 2 = third-person, 3 = isometric
-  if (e.key === '1') {
-    player.cameraMode = 'first-person'
-    cameraController.setMode('first-person')
-    e.preventDefault()
-  } else if (e.key === '2') {
-    player.cameraMode = 'third-person'
-    cameraController.setMode('third-person')
-    e.preventDefault()
-  } else if (e.key === '3') {
-    player.cameraMode = 'isometric'
-    cameraController.setMode('isometric')
-    e.preventDefault()
-  }
-
-  // Prevent scrolling with arrow keys
-  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
-    e.preventDefault()
-  }
-})
-
-window.addEventListener('keyup', (e: KeyboardEvent): void => {
-  keys.delete(e.key.toLowerCase())
-})
 
 // ---------------------------------------------------------------------------
 // Fixed-step simulation update (60 Hz)
 // ---------------------------------------------------------------------------
-
-function updatePlayer(dt: number): void {
-  const yaw = player.transform.rotation.y
-  const speed = MOVE_SPEED * dt
-  const sinY = Math.sin(yaw)
-  const cosY = Math.cos(yaw)
-
-  // Compute desired movement delta
-  let dx = 0, dz = 0
-  if (keys.has('w') || keys.has('arrowup')) {
-    dx += sinY * speed
-    dz += cosY * speed
-  }
-  if (keys.has('s') || keys.has('arrowdown')) {
-    dx -= sinY * speed
-    dz -= cosY * speed
-  }
-  if (keys.has('a') || keys.has('arrowleft')) {
-    dx -= cosY * speed
-    dz += sinY * speed
-  }
-  if (keys.has('d') || keys.has('arrowright')) {
-    dx += cosY * speed
-    dz -= sinY * speed
-  }
-
-  // Apply collision resolution to movement delta
-  if (dx !== 0 || dz !== 0) {
-    const delta = { x: dx, y: 0, z: dz }
-    const resolved = collisionResolver.resolveMovement(
-      player.transform.position,
-      delta,
-      chunkManager.getActiveChunks(),
-    )
-    player.transform.position = resolved
-  }
-
-  // Q / E for yaw
-  if (keys.has('q')) player.transform.rotation.y -= LOOK_SPEED * dt
-  if (keys.has('e')) player.transform.rotation.y += LOOK_SPEED * dt
-}
 
 function updateChunks(): void {
   const pos = player.transform.position
@@ -212,8 +140,11 @@ function gameLoopTick(nowMs: number): void {
 
   // Drain fixed steps
   while (accumulator >= FIXED_DT) {
-    updatePlayer(FIXED_DT)
+    updatePlayerMovement(player, FIXED_DT, collisionResolver, chunkManager.getActiveChunks())
+    syncPlayerEntity(simulation, playerEntity, player)
     updateChunks()
+    simulation.setChunks(chunkManager.getActiveChunks())
+    simulation.update(FIXED_DT)
     accumulator -= FIXED_DT
   }
 
@@ -227,6 +158,25 @@ function gameLoopTick(nowMs: number): void {
   renderFrame(player)
 
   requestAnimationFrame(gameLoopTick)
+}
+
+// ---------------------------------------------------------------------------
+// Camera switching
+// ---------------------------------------------------------------------------
+
+function initCameraSwitching(): void {
+  window.addEventListener('keydown', (e: KeyboardEvent): void => {
+    if (e.key === '1') {
+      player.cameraMode = 'first-person'
+      cameraController.setMode('first-person')
+    } else if (e.key === '2') {
+      player.cameraMode = 'third-person'
+      cameraController.setMode('third-person')
+    } else if (e.key === '3') {
+      player.cameraMode = 'isometric'
+      cameraController.setMode('isometric')
+    }
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -244,22 +194,39 @@ function init(): void {
   // 3. Collision resolver
   collisionResolver = new CollisionResolver()
 
-  // 4. ECS Entity Manager
-  entityManager = new EntityManager()
+  // 4. Simulation orchestrator (owns EntityManager, SpatialHashGrid, systems)
+  simulation = new Simulation(8.0)
 
-  // 5. Render - mount WebGL canvas into #app
+  // 5. Create player entity in ECS with Transform component
+  playerEntity = createPlayerEntity(simulation, player)
+
+  // 6. Initialize input handling
+  initInput()
+  initCameraSwitching()
+
+  // 7. Register simulation event handlers
+  simulation.on({
+    onItemPickup: (event) => {
+      console.log(`Picked up ${event.itemId} at`, event.position)
+    },
+    onDeath: (event) => {
+      console.log(`Entity ${event.entity} died at`, event.position)
+    },
+  })
+
+  // 8. Render - mount WebGL canvas into #app
   const app = document.getElementById('app')
   if (app === null) throw new Error('No #app element found in DOM')
   cameraController = initRender(app)
   cameraController.setMode(player.cameraMode)
 
-  // 6. Entity Renderer
-  entityRenderer = new EntityRenderer(entityManager, scene)
+  // 9. Entity Renderer (uses Simulation's EntityManager)
+  entityRenderer = new EntityRenderer(simulation.entityManager, scene)
 
   // Add selection box to scene
   scene.add(selectionBox.meshRef)
 
-  // 7. Kick off loop
+  // 10. Kick off loop
   lastTime = performance.now()
   requestAnimationFrame(gameLoopTick)
 }

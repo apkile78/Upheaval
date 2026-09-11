@@ -71,3 +71,22 @@ export const SWIMMABLE_TERRAIN: ReadonlySet<import('./world').TileTerrainType> =
   'water',
   'swamp',
 ]);
+
+/**
+ * Integer cell coordinate for spatial hashing.
+ * Represents a discrete bucket in the 3D spatial hash grid.
+ */
+export interface CellCoordinate {
+  x: number;
+  y: number;
+  z: number;
+}
+
+/**
+ * Result of a spatial radius query.
+ * Contains the entity ID and its current cell position.
+ */
+export interface SpatialQueryEntry {
+  entity: import('./ecs').Entity;
+  position: [number, number, number];
+}
