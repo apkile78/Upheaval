@@ -9,8 +9,6 @@
  */
 
 import type { PlayerState } from '../types/player';
-import type { WorldChunk } from '../types/world';
-import { CollisionResolver } from './physics/collision';
 
 // ---------------------------------------------------------------------------
 // Input state
@@ -64,8 +62,6 @@ function handleKeyUp(e: KeyboardEvent): void {
 export function updatePlayerMovement(
   player: PlayerState,
   dt: number,
-  resolver: CollisionResolver,
-  chunks: WorldChunk[],
 ): void {
   const forward = keys.has('w') || keys.has('arrowup');
   const backward = keys.has('s') || keys.has('arrowdown');
@@ -89,15 +85,11 @@ export function updatePlayerMovement(
   if (left) { dx += Math.cos(yaw); dz -= Math.sin(yaw); }
   if (right) { dx -= Math.cos(yaw); dz += Math.sin(yaw); }
 
-  // Apply speed + collision
+  // Apply movement directly (terrain following handles surface contact)
   const len = Math.sqrt(dx * dx + dz * dz);
   if (len > 0) {
-    dx = (dx / len) * MOVE_SPEED * dt;
-    dz = (dz / len) * MOVE_SPEED * dt;
-    const delta = { x: dx, y: 0, z: dz };
-    const resolved = resolver.resolveMovement(player.transform.position, delta, chunks);
-    player.transform.position.x = resolved.x;
-    player.transform.position.z = resolved.z;
+    player.transform.position.x += (dx / len) * MOVE_SPEED * dt;
+    player.transform.position.z += (dz / len) * MOVE_SPEED * dt;
   }
 
   // Vertical

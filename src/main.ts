@@ -8,19 +8,19 @@
  * Fixed-timestep simulation loop (60 Hz) driving the WebGL render pipeline.
  */
 
-import { CollisionResolver } from './sim/physics/collision'
-import { raycastTiles } from './sim/physics/raycast'
 import { ChunkManager } from './sim/world/chunkManager'
 import { Simulation } from './sim/simulation'
 import { EntityRenderer } from './render/entityRenderer'
 import { ChunkRenderer } from './render/chunkRenderer'
 import { createPlayerEntity, syncPlayerEntity } from './sim/player'
 import { initInput, updatePlayerMovement } from './sim/playerController'
+import { snapPlayerToGround } from './sim/terrainFollow'
 import type { Entity } from './types/ecs'
 import type { ChunkCoordinate } from './types/world'
 import type { PlayerState } from './types/player'
 import { initRender, renderFrame, scene } from './render/canvas'
 import { selectionBox } from './render/selectionBox'
+import { updateTargetTile } from './render/targetTile'
 import { HUDManager } from './render/ui/hudManager'
 
 /** Simulation timestep (60 Hz) in milliseconds. */
@@ -31,9 +31,6 @@ let chunkManager!: ChunkManager
 
 /** Singleton render controller. */
 let cameraController!: ReturnType<typeof initRender>
-
-/** Collision resolver for player movement. */
-let collisionResolver!: CollisionResolver
 
 /** Current player state. */
 let player!: PlayerState
@@ -53,7 +50,6 @@ let playerEntity!: Entity
 /** HUD Manager for UI overlays. */
 let hudManager!: HUDManager
 
-
 // ---------------------------------------------------------------------------
 // Initial state construction
 // ---------------------------------------------------------------------------
@@ -72,7 +68,7 @@ function createInitialPlayer(): PlayerState {
     },
     inventory: { items: [], capacity: 100 },
     transform: {
-      position: { x: 8, y: 2, z: 8 },
+      position: { x: 100, y: 0, z: 100 },
       rotation: { x: 0, y: 0, z: 0 },
     },
     cameraMode: 'isometric',
@@ -90,38 +86,12 @@ function updateChunks(): void {
     y: Math.floor(pos.y / 16),
     z: Math.floor(pos.z / 16),
   }
-  chunkManager.updateActiveChunks(center, 2)
+  chunkManager.updateActiveChunks(center, 4)
 }
 
 // ---------------------------------------------------------------------------
 // Target tile raycasting (updated every render frame)
 // ---------------------------------------------------------------------------
-
-const RAYCAST_MAX_DISTANCE = 50;
-
-function updateTargetTile(): void {
-  const pos = player.transform.position;
-  const rot = player.transform.rotation;
-
-  const yaw = rot.y;
-  const pitch = rot.x;
-  const dirX = Math.sin(yaw) * Math.cos(pitch);
-  const dirY = Math.sin(pitch);
-  const dirZ = Math.cos(yaw) * Math.cos(pitch);
-
-  const ray = {
-    origin: { x: pos.x, y: pos.y + 1.6, z: pos.z },
-    direction: { x: dirX, y: dirY, z: dirZ },
-  };
-
-  const hit = raycastTiles(ray, RAYCAST_MAX_DISTANCE, chunkManager);
-  if (hit && hit.hit) {
-    selectionBox.updateFromWorldPos(hit.point);
-    selectionBox.setVisible(true);
-  } else {
-    selectionBox.setVisible(false);
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Game loop
@@ -143,7 +113,8 @@ function gameLoopTick(now: number): void {
 
   // Drain fixed steps
   while (accumulator >= FIXED_DT_MS) {
-    updatePlayerMovement(player, FIXED_DT_MS / 1000, collisionResolver, chunkManager.getActiveChunks())
+    updatePlayerMovement(player, FIXED_DT_MS / 1000)
+    snapPlayerToGround(player, chunkManager, FIXED_DT_MS / 1000)
     syncPlayerEntity(simulation, playerEntity, player)
     updateChunks()
     simulation.setChunks(chunkManager.getActiveChunks())
@@ -151,20 +122,25 @@ function gameLoopTick(now: number): void {
     accumulator -= FIXED_DT_MS
   }
 
+
   // Sync HUD health display
   hudManager.updateHealth(player.health, player.maxHealth)
 
   // Update chunk terrain meshes
-  chunkRenderer.updateAllChunks(chunkManager.getActiveChunks())
+const chunks = chunkManager.getActiveChunks();
+  const maps = chunks.map((ch) => chunkManager.getHeightmap(ch.coordinate)!);
+  const neighs = chunks.map((ch) => ({ ...ch.coordinate, y: 0 })).map(getNeighbors);
+  chunkRenderer.updateAllChunks(chunks, maps, neighs)
 
   // Update target tile via raycast
-  updateTargetTile()
+  updateTargetTile(player, chunkManager, selectionBox)
 
   // Update entity renderer (sync ECS entities to meshes)
   entityRenderer.update()
 
   // Render every frame with latest state
   renderFrame(player)
+
 }
 
 // ---------------------------------------------------------------------------
@@ -190,28 +166,42 @@ function initCameraSwitching(): void {
 // Boot
 // ---------------------------------------------------------------------------
 
+/** Get all 8 neighbor heightmaps for seamless chunk edges (null when absent). */
+function getNeighbors(coord: { x: number; y: number; z: number }) {
+  return {
+    nw: chunkManager.getNeighborHeightmap(coord, -1, -1) ?? null,
+    n:  chunkManager.getNeighborHeightmap(coord, 0, -1) ?? null,
+    ne: chunkManager.getNeighborHeightmap(coord, 1, -1) ?? null,
+    w:  chunkManager.getNeighborHeightmap(coord, -1, 0) ?? null,
+    e:  chunkManager.getNeighborHeightmap(coord, 1, 0) ?? null,
+    sw: chunkManager.getNeighborHeightmap(coord, -1, 1) ?? null,
+    s:  chunkManager.getNeighborHeightmap(coord, 0, 1) ?? null,
+    se: chunkManager.getNeighborHeightmap(coord, 1, 1) ?? null,
+  };
+}
+
 function init(): void {
   // 1. Simulation - initialise chunk manager and populate starter chunks
   chunkManager = new ChunkManager(42)
-  chunkManager.updateActiveChunks({ x: 0, y: 0, z: 0 }, 2)
+  chunkManager.updateActiveChunks({ x: 0, y: 0, z: 0 }, 4)
 
   // 2. Player state
   player = createInitialPlayer()
 
-  // 3. Collision resolver
-  collisionResolver = new CollisionResolver()
+  // 3. Snap player to terrain surface at start
+  snapPlayerToGround(player, chunkManager, FIXED_DT_MS / 1000)
 
-  // 4. Simulation orchestrator (owns EntityManager, SpatialHashGrid, systems)
+  // 5. Simulation orchestrator (owns EntityManager, SpatialHashGrid, systems)
   simulation = new Simulation(8.0)
 
-  // 5. Create player entity in ECS with Transform component
+  // 6. Create player entity in ECS with Transform component
   playerEntity = createPlayerEntity(simulation, player)
 
-  // 6. Initialize input handling
+  // 7. Initialize input handling
   initInput()
   initCameraSwitching()
 
-  // 7. Initialize HUD and register event handlers
+  // 8. Initialize HUD and register event handlers
   hudManager = new HUDManager()
   hudManager.updateHealth(player.health, player.maxHealth)
 
@@ -224,26 +214,27 @@ function init(): void {
     },
   })
 
-  // 8. Render - mount WebGL canvas into #app
+  // 9. Render - mount WebGL canvas into #app
   const app = document.getElementById('app')
   if (app === null) throw new Error('No #app element found in DOM')
   cameraController = initRender(app)
   cameraController.setMode(player.cameraMode)
 
-  // 9. Entity Renderer (uses Simulation's EntityManager)
+  // 10. Entity Renderer (uses Simulation's EntityManager)
   entityRenderer = new EntityRenderer(simulation.entityManager, scene)
 
-  // 10. Chunk Renderer - create terrain meshes
+  // 11. Chunk Renderer - create terrain meshes
   chunkRenderer = new ChunkRenderer(scene)
   const initialChunks = chunkManager.getActiveChunks()
   for (const chunk of initialChunks) {
-    chunkRenderer.updateChunkMesh(chunk)
+    chunkRenderer.updateChunkMesh(chunk, chunkManager.getHeightmap(chunk.coordinate)!, getNeighbors({ ...chunk.coordinate, y: 0 }))
   }
 
   // Add selection box to scene
   scene.add(selectionBox.meshRef)
 
-  // 11. Kick off loop
+
+  // 12. Kick off loop
   lastTime = performance.now()
   requestAnimationFrame(gameLoopTick)
 }

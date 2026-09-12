@@ -102,7 +102,7 @@ export class CameraController {
 
   private updateFirstPerson(pos: Vector3D, rot: Vector3D): void {
     const cam = this.perspectiveCamera;
-    cam.position.set(pos.x * SCALE, pos.y * SCALE + 1.7, pos.z * SCALE);
+    cam.position.set(pos.x * SCALE, pos.y * SCALE + 0.7, pos.z * SCALE);
 
     // Rotate camera to match player heading (yaw) and look-down (pitch)
     cam.rotation.set(0, 0, 0);
@@ -126,7 +126,7 @@ export class CameraController {
       pos.z * SCALE + offsetZ,
     );
 
-    cam.lookAt(pos.x * SCALE, pos.y * SCALE + 1.5, pos.z * SCALE);
+    cam.lookAt(pos.x * SCALE, pos.y * SCALE, pos.z * SCALE);
   }
 
   private updateIsometric(pos: Vector3D): void {
