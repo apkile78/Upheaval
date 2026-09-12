@@ -11,6 +11,9 @@ import {
   Scene,
   Color,
   PerspectiveCamera,
+  DirectionalLight,
+  AmbientLight,
+  HemisphereLight,
 } from 'three';
 
 import type { PlayerState } from '../types/player';
@@ -29,7 +32,7 @@ export const renderer: WebGLRenderer = new WebGLRenderer({
   alpha: false,
 });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.shadowMap.enabled = false; // enabled when we have materials
+renderer.shadowMap.enabled = false;
 
 /** Module-level camera controller instance. Set by initRender. */
 let cameraController: CameraController | null = null;
@@ -46,13 +49,23 @@ export function initRender(mountNode: HTMLElement): CameraController {
 
   cameraController = new CameraController(renderer.domElement);
 
+  // Add lighting
+  const sun = new DirectionalLight(0xffffff, 1.2);
+  sun.position.set(100, 200, 100);
+  scene.add(sun);
+
+  const ambient = new AmbientLight(0x404060, 0.4);
+  scene.add(ambient);
+
+  const hemi = new HemisphereLight(0x87ceeb, 0x3d5c3d, 0.3);
+  scene.add(hemi);
+
   function onResize(): void {
     const w = window.innerWidth;
     const h = window.innerHeight;
     renderer.setSize(w, h);
 
     if (cameraController !== null && cameraController.currentMode !== null) {
-      // Only perspective cameras have the aspect property.
       const cam = cameraController.camera;
       if (cam instanceof PerspectiveCamera) {
         cam.aspect = w / h;

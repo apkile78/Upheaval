@@ -13,6 +13,7 @@ import { raycastTiles } from './sim/physics/raycast'
 import { ChunkManager } from './sim/world/chunkManager'
 import { Simulation } from './sim/simulation'
 import { EntityRenderer } from './render/entityRenderer'
+import { ChunkRenderer } from './render/chunkRenderer'
 import { createPlayerEntity, syncPlayerEntity } from './sim/player'
 import { initInput, updatePlayerMovement } from './sim/playerController'
 import type { Entity } from './types/ecs'
@@ -22,8 +23,8 @@ import { initRender, renderFrame, scene } from './render/canvas'
 import { selectionBox } from './render/selectionBox'
 import { HUDManager } from './render/ui/hudManager'
 
-/** Simulation timestep (60 Hz). */
-const FIXED_DT = 1 / 60
+/** Simulation timestep (60 Hz) in milliseconds. */
+const FIXED_DT_MS = 1000 / 60
 
 /** Singleton simulation manager. */
 let chunkManager!: ChunkManager
@@ -42,6 +43,9 @@ let simulation!: Simulation
 
 /** Entity Renderer for syncing ECS entities to Three.js meshes. */
 let entityRenderer!: EntityRenderer
+
+/** Chunk Renderer for terrain meshes. */
+let chunkRenderer!: ChunkRenderer
 
 /** Player entity ID in ECS. */
 let playerEntity!: Entity
@@ -68,16 +72,12 @@ function createInitialPlayer(): PlayerState {
     },
     inventory: { items: [], capacity: 100 },
     transform: {
-      position: { x: 0, y: 0, z: 0 },
+      position: { x: 8, y: 2, z: 8 },
       rotation: { x: 0, y: 0, z: 0 },
     },
-    cameraMode: 'first-person',
+    cameraMode: 'isometric',
   }
 }
-
-// ---------------------------------------------------------------------------
-// ---------------------------------------------------------------------------
-
 
 // ---------------------------------------------------------------------------
 // Fixed-step simulation update (60 Hz)
@@ -103,57 +103,59 @@ function updateTargetTile(): void {
   const pos = player.transform.position;
   const rot = player.transform.rotation;
 
-  // Build view direction from player yaw (and pitch if available)
   const yaw = rot.y;
-  const pitch = rot.x || 0;
-
+  const pitch = rot.x;
   const dirX = Math.sin(yaw) * Math.cos(pitch);
   const dirY = Math.sin(pitch);
   const dirZ = Math.cos(yaw) * Math.cos(pitch);
 
   const ray = {
-    origin: { x: pos.x, y: pos.y + 1.7, z: pos.z },
+    origin: { x: pos.x, y: pos.y + 1.6, z: pos.z },
     direction: { x: dirX, y: dirY, z: dirZ },
   };
 
   const hit = raycastTiles(ray, RAYCAST_MAX_DISTANCE, chunkManager);
-
   if (hit && hit.hit) {
-    // Update selection box to show targeted tile
-    selectionBox.updatePosition(hit.tileCoord.x, hit.tileCoord.y, hit.tileCoord.z);
+    selectionBox.updateFromWorldPos(hit.point);
+    selectionBox.setVisible(true);
   } else {
-    selectionBox.hide();
+    selectionBox.setVisible(false);
   }
 }
 
 // ---------------------------------------------------------------------------
-// Fixed-timestep game loop
+// Game loop
 // ---------------------------------------------------------------------------
 
-let accumulator = 0
-let lastTime = 0
+let lastTime = 0;
+let accumulator = 0;
 
-function gameLoopTick(nowMs: number): void {
-  const nowSec = nowMs / 1000
-  const elapsed = nowSec - lastTime
-  lastTime = nowSec
+function gameLoopTick(now: number): void {
+  requestAnimationFrame(gameLoopTick);
+
+  // Convert to milliseconds and compute elapsed
+  const elapsed = now - lastTime;
+  lastTime = now;
 
   // Clamp to prevent spiral-of-death after tab switches
-  const clamped = Math.min(elapsed, 0.25)
+  const clamped = Math.min(elapsed, 250)
   accumulator += clamped
 
   // Drain fixed steps
-  while (accumulator >= FIXED_DT) {
-    updatePlayerMovement(player, FIXED_DT, collisionResolver, chunkManager.getActiveChunks())
+  while (accumulator >= FIXED_DT_MS) {
+    updatePlayerMovement(player, FIXED_DT_MS / 1000, collisionResolver, chunkManager.getActiveChunks())
     syncPlayerEntity(simulation, playerEntity, player)
     updateChunks()
     simulation.setChunks(chunkManager.getActiveChunks())
-    simulation.update(FIXED_DT)
-    accumulator -= FIXED_DT
+    simulation.update(FIXED_DT_MS / 1000)
+    accumulator -= FIXED_DT_MS
   }
 
   // Sync HUD health display
   hudManager.updateHealth(player.health, player.maxHealth)
+
+  // Update chunk terrain meshes
+  chunkRenderer.updateAllChunks(chunkManager.getActiveChunks())
 
   // Update target tile via raycast
   updateTargetTile()
@@ -163,8 +165,6 @@ function gameLoopTick(nowMs: number): void {
 
   // Render every frame with latest state
   renderFrame(player)
-
-  requestAnimationFrame(gameLoopTick)
 }
 
 // ---------------------------------------------------------------------------
@@ -233,10 +233,17 @@ function init(): void {
   // 9. Entity Renderer (uses Simulation's EntityManager)
   entityRenderer = new EntityRenderer(simulation.entityManager, scene)
 
+  // 10. Chunk Renderer - create terrain meshes
+  chunkRenderer = new ChunkRenderer(scene)
+  const initialChunks = chunkManager.getActiveChunks()
+  for (const chunk of initialChunks) {
+    chunkRenderer.updateChunkMesh(chunk)
+  }
+
   // Add selection box to scene
   scene.add(selectionBox.meshRef)
 
-  // 10. Kick off loop
+  // 11. Kick off loop
   lastTime = performance.now()
   requestAnimationFrame(gameLoopTick)
 }

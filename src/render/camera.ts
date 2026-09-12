@@ -50,14 +50,14 @@ export class CameraController {
     this.perspectiveCamera.position.set(0, 1.7, 0); // eye height
 
     this.orthographicCamera = new OrthographicCamera(
-      -aspect * 10,
-      aspect * 10,
-      10,
-      -10,
+      -aspect * 5,
+      aspect * 5,
+      5,
+      -5,
       0.1,
-      1000,
+      500,
     );
-    this.orthographicCamera.position.set(0, 20, 0);
+    this.orthographicCamera.position.set(12, 12, 12);
     this.orthographicCamera.lookAt(0, 0, 0);
 
     this.camera = this.perspectiveCamera;
@@ -131,20 +131,20 @@ export class CameraController {
 
   private updateIsometric(pos: Vector3D): void {
     const cam = this.orthographicCamera;
-    const dist = 30;
+    const dist = 12;
 
     cam.position.set(
       pos.x * SCALE + dist,
       pos.y * SCALE + dist,
       pos.z * SCALE + dist,
     );
-    cam.lookAt(pos.x * SCALE, pos.y * SCALE, pos.z * SCALE);
+    cam.lookAt(pos.x * SCALE, pos.y * SCALE + 1, pos.z * SCALE);
     this.syncOrthoAspect();
   }
 
   private syncOrthoAspect(): void {
     const aspect = this.canvas.clientWidth / this.canvas.clientHeight;
-    const halfHeight = 10;
+    const halfHeight = 5;
     const halfWidth = aspect * halfHeight;
 
     this.orthographicCamera.left = -halfWidth;

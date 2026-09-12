@@ -8,16 +8,17 @@
  * Zero Three.js, Babylon.js, or DOM imports.
  */
 
-import type { Entity, TransformComponent } from '../types/ecs';
+import type { Entity, TransformComponent, RenderableComponent } from '../types/ecs';
 import type { PlayerState } from '../types/player';
 import type { Simulation } from './simulation';
 
 /**
- * Create the player entity in ECS with a Transform component.
+ * Create the player entity in ECS with Transform + Renderable components.
  */
 export function createPlayerEntity(simulation: Simulation, player: PlayerState): Entity {
   const entity = simulation.entityManager.createEntity();
-  simulation.entityManager.addComponent(entity, 'Transform', {
+  
+  const transform: TransformComponent = {
     position: {
       x: player.transform.position.x,
       y: player.transform.position.y,
@@ -25,7 +26,16 @@ export function createPlayerEntity(simulation: Simulation, player: PlayerState):
     },
     rotation: { x: 0, y: 0, z: 0 },
     velocity: { x: 0, y: 0, z: 0 },
-  });
+  };
+  simulation.entityManager.addComponent(entity, 'Transform', transform);
+  
+  const renderable: RenderableComponent = {
+    meshTypeId: 'enemy',
+    scale: { x: 0.6, y: 1.8, z: 0.6 },
+    visible: true,
+  };
+  simulation.entityManager.addComponent(entity, 'Renderable', renderable);
+  
   simulation.setPlayerEntity(entity);
   return entity;
 }
