@@ -2,11 +2,7 @@
 
 1. BEFORE STARTING ANY TASK: Read `AGENT_RULES.md` and check the relevant module file in `/docs/` (e.g., `01_engine_architecture.md`).
 2. ARCHITECTURE CONSTRAINT: Keep `/src/sim/` completely free of render dependencies (no Babylon/Three.js imports allowed in simulation code).
-3. MODULAR BOUNDARIES: No file over 250 lines. Keep tasks granular.
+3. MODULAR BOUNDARIES: No file over 200 lines. Keep tasks granular.
 4. TYPE SAFETY: No `any` types. Read types from `/src/types/`.
-Plan Mode Instructions: Force the agent to write out an architectural plan, list modified files, and identify potential TypeScript breaking changes before generating code. 
-Act Mode Instructions: Instruct the agent to strictly follow approved steps, output small diffs, and run npm run type-check immediately after writing code.
-ask me if I want to git commit or create a Git stash before executing any complex prompt.
-If things are looking very bad (broken), ask me if I want to run a git reset --hard to instantly restore a working state instead of debugging
 For using terminal commands, give commands 10 seconds only, after ten seconds read the output and proceed while running.
 EXPLICIT: do not switch modes (act/plan) under any circumstance regardless, only and always wait for the manual toggle.
