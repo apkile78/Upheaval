@@ -45,10 +45,10 @@ function check(name, cond, detail) {
 
 const continentModel = createContinentModel(42);
 const landmaskInteriorSamples = [
-  [0.3, 0.3],
-  [1000, 0],
-  [-300, 600],
-  [0, 1500],
+  [1203.83, 194.6],
+  [1706.24, 628.79],
+  [1250, 250],
+  [1750, 700],
 ];
 let interiorLand = true;
 for (const [x, z] of landmaskInteriorSamples) {

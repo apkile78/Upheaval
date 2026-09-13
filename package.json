@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "serve": "npx tsx test-server.mjs"
   },
   "dependencies": {
     "localforage": "^1.10.0",
