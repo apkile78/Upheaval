@@ -31,13 +31,19 @@ export class ChunkManager {
     // river tracing, both driven by the meandering coast factor (Step 6.2).
     const coastFactor = (wx: number, wz: number): number => this.biomeManager.getCoastFactor(wx, wz);
     const macro = new MacroHeightmap(baseSeed, coastFactor);
-    this.riverGenerator = new RiverGenerator(baseSeed, macro, coastFactor);
+    this.riverGenerator = new RiverGenerator(baseSeed, macro, coastFactor, this.biomeManager.getLandmask.bind(this.biomeManager));
     this.riverGenerator.generate();
 
     // Region classification (Step 6.5/6.6): biases chunk generation nudging
     // elevation/moisture output - never overriding the base noise - based on
     // the archetype at each location, alongside intersecting river data.
-    const regionMap = new RegionMap(baseSeed, macro, coastFactor, this.riverGenerator);
+    const regionMap = new RegionMap(
+      baseSeed,
+      macro,
+      coastFactor,
+      this.riverGenerator,
+      this.biomeManager.getLandmask.bind(this.biomeManager),
+    );
     this.biomeManager.setRegionProvider((wx: number, wz: number) => REGION_BIASES[regionMap.getRegionAt(wx, wz)]);
   }
 

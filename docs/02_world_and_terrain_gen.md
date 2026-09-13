@@ -1,80 +1,75 @@
 # 02. World & Terrain Generation
 
-## Infinite East Coast Map Generation
+## Parametric, Seed-Generated Continents
 
-### Geographical Model
-The world generator recreates the eastern seaboard of North America using real geological parameters:
+### Core Model
+The world is now generated from a seeded continent profile rather than a fixed eastern-seaboard template. The current model owns three layers:
 
-**Regions (east to west):**
-| Region | World X Range | Elevation | Biomes |
-|--------|--------------|-----------|--------|
-| Atlantic Ocean | < 0 | -50 to 0 | Deep water, continental shelf |
-| Coastal Beach | 0-50 | 0-5 | Sand, dunes, marsh |
-| Coastal Plain | 50-300 | 5-100 | Grassland, farmland, swamp |
-| Piedmont | 300-500 | 100-300 | Deciduous forest, rolling hills |
-| Appalachian Mountains | 500-800 | 300-2000 | Mixed forest, alpine, snow peaks |
-| Interior Plateau | > 800 | 200-500 | Highland forest |
+1. **Continent model** (`src/sim/world/continentModel.ts`)
+   - Builds a deterministic continent profile from the seed
+   - Generates multiple seeded continental footprints, each with a distinct center, radius, and strength
+   - Produces a `landmask(x, z)` that is approximately 0 in deep ocean and approximately 1 in the seeded continental interior
 
-**Real-World Reference Points:**
-- Mount Mitchell (highest east of Mississippi): ~2037m
-- Appalachian Trail corridor: 500-2000m elevation gradient
-- Chesapeake Bay: low-lying wetland/marsh at coastal plain elevation
-- Delaware/Hudson river valleys: carved channels through piedmont
+2. **Basin model** (`src/sim/world/basinModel.ts`)
+   - Partitions each continent footprint into one or more contiguous basins
+   - Assigns headwaters, outlets, and basin base levels from the same seed
+   - Stores enough metadata for later river and biome routing decisions
+
+3. **Elevation model** (`src/sim/world/elevationModel.ts`)
+   - Combines landmask + basin staircase + bounded relief texture
+   - Produces a monotone staircase-like cross-section from headwaters toward basin outlet
+   - Keeps terrain contiguous by limiting relief to a bounded local band
 
 ### Generation Pipeline
-1. **Base Elevation**: Coast-distance function + domain-warped simplex noise
-2. **Ridge Formation**: Ridged noise for Appalachian ridgelines
-3. **Moisture Map**: Secondary noise for wetland/river placement
-4. **Biome Assignment**: Elevation + moisture + region → biome type
-5. **Chunk Materialization**: Heightmap → tile matrix + render mesh
+1. **Seed → continent profile**: `createContinentModel(seed)`
+2. **Seed → procedural basins**: `createBasinModel(profile)`
+3. **Seed → staircase elevation**: `createElevationModel(seed)`
+4. **Biome assignment**: existing `BiomeManager` uses the landmask and basin-aware elevation values
+5. **Chunk materialization**: `ChunkManager` generates terrain tiles from the integrated elevation path
 
-### Floating Origin System
-64-bit precision coordinate system prevents jitter and floating-point errors when flying or traveling tens of thousands of units away from start position.
+### Landmask Behavior
+The landmask is the key Phase 1 fix for the previous interior-water problem:
+- Deep ocean samples remain oceanic
+- Seeded continent interiors stay land
+- Coastal bands remain a smooth transition instead of a single hardcoded coastline
 
-### Noise Architecture
-- **Base terrain**: 4-octave FBM with domain warping for natural ridgelines
-- **Detail**: 2-octave high-frequency noise for surface roughness
-- **Ridge noise**: 1-|sin(x)| transform for mountain crests
-- **Coast falloff**: Smoothstep gradient from ocean to piedmont
+This creates a deterministic world footprint without depending on a recognizable real-world geography.
 
-## Biome System
+## Basin & Elevation Semantics
 
-### Elevation-Driven Biomes
-| Elevation (m) | Biome | Color | Features |
-|---------------|-------|-------|----------|
-| < 0 | Deep Water | #1a3a5c | Impassable |
-| 0-2 | Shallow Water | #2e6b9e | Passable, swim |
-| 2-5 | Beach/Marsh | #c2b280 | Wet, slow movement |
-| 5-50 | Coastal Plain | #4a7c3f | Grassland, farmland |
-| 50-150 | Wetland | #3d5c3a | Marsh, dense vegetation |
-| 150-400 | Piedmont Forest | #2d5a2d | Deciduous, rolling hills |
-| 400-800 | Highland Forest | #1e4a1e | Mixed conifer/deciduous |
-| 800-1500 | Mountain Forest | #3a5c4a | Dense conifer, rocky |
-| 1500-2000 | Alpine | #6b7b6b | Sparse vegetation, bare rock |
-| > 2000 | Snow Peak | #f0f0f5 | Permanent snow |
+### Basin Properties
+Each basin carries:
+- a deterministic id
+- the continent it belongs to
+- a headwater zone and elevation basis
+- an outlet type (`ocean`, `endorheic`, or `lake`)
+- a dominant biome hint for later biome selection
 
-### Moisture Modifiers
-- **Low moisture** (<0.3): Dry variants (grassland, scrub)
-- **Medium moisture** (0.3-0.6): Standard forest
-- **High moisture** (>0.6): Dense forest, wetlands
+### Staircase Elevation
+The staircase model defines broad, monotone bands by flow distance to the basin outlet. The overall terrain equation is conceptually:
 
-## Subterranean Node Integration (Hole-Punching)
-Non-voxel continuous heightmaps are integrated with subterranean structures (bunkers, sewers, natural caves) using dynamic clipping:
-1. Dynamic heightmap clipping shader punches invisible holes in terrain geometry at entrance node bounds.
-2. Modular underground pre-fabricated chunks generate procedurally beneath surface hole via Wave Function Collapse (WFC).
-3. Seamless spatial audio/lighting transitions avoid loading screens between surface and subterranean zones.
+`elevation(x, z) = landmask(x, z) * (basinStaircase(x, z) + reliefTexture(x, z))`
 
-## Rendering Features
-- **Vertex coloring**: Per-vertex color by biome + elevation gradient
-- **Smooth normals**: Computed via `computeVertexNormals()` for natural lighting
-- **Flat shading option**: For stylized low-poly aesthetic
-- **Material**: MeshStandardMaterial with vertexColors for PBR lighting
-- **Chunk mesh**: Single mesh per chunk (16×16 grid) for performance
+This keeps terrain coherent across the full basin footprint:
+- no sporadic water islands in the interior
+- no band flipping caused by local noise spikes
+- smooth high-level transitions between plains, foothills, and basin base levels
+
+## Existing Systems Still In Use
+- `BiomeManager` retains the existing coastal baseline, ridge shaping, and moisture logic
+- `RegionMap` continues to classify archetypes but now respects the seeded landmask when deciding whether a sample is truly oceanic
+- `RiverGenerator` now uses the landmask to ensure rivers start and terminate within the seeded continent envelope
+
+## Rendering Notes
+- Chunk generation remains mesh-based, but the terrain surface now comes from a deterministic continent/basin-aware model
+- The render-distance and LOD sub-phase remains a separate concern from the world-model correctness itself
 
 ## Files
 | File | Purpose |
 |------|---------|
-| `src/sim/world/noise.ts` | Simplex noise + FBM + ridge noise |
-| `src/sim/world/biomeManager.ts` | Region/biome lookup by elevation+moisture |
-| `src/sim/world/chunkManager.ts` | Chunk generation + heightmap buffers |
-| `src/render/chunkRenderer.ts` | Three.js mesh generation from heightmaps |
+| `src/sim/world/continentModel.ts` | Seed-generated continent profile + landmask |
+| `src/sim/world/basinModel.ts` | Procedural basins + outlet metadata |
+| `src/sim/world/elevationModel.ts` | Staircase elevation + bounded relief texture |
+| `src/sim/world/biomeManager.ts` | Integrated elevation lookup with landmask/basin influence |
+| `src/sim/world/regionMap.ts` | Region classification aligned to the seeded footprint |
+| `src/sim/world/riverGenerator.ts` | River generation aligned to the landmask |

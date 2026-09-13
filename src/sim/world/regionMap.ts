@@ -55,6 +55,7 @@ export class RegionMap {
   private macro: MacroHeightmap;
   private coastFactor: CoastFactorFn;
   private rivers: RiverPointSource | null;
+  private landmask: ((worldX: number, worldZ: number) => number) | null;
   private blendNoise: SimplexNoise;
   /** Memoized archetype per macro-cell ("cx,cz" -> archetype). */
   private cache: Map<string, RegionArchetype> = new Map();
@@ -71,10 +72,12 @@ export class RegionMap {
     macro: MacroHeightmap,
     coastFactor: CoastFactorFn,
     rivers?: RiverPointSource,
+    landmask?: (worldX: number, worldZ: number) => number,
   ) {
     this.macro = macro;
     this.coastFactor = coastFactor;
     this.rivers = rivers ?? null;
+    this.landmask = landmask ?? null;
     this.blendNoise = new SimplexNoise(seed + 8000);
   }
 
@@ -140,6 +143,13 @@ export class RegionMap {
     const cf = this.coastFactor(worldX, worldZ);
     const n = this.sampleNeighborhood(worldX, worldZ);
     const blend = this.blend(worldX, worldZ);
+
+    // Phase 1 landmask: when the seeded continent footprint says we are in the
+    // ocean, keep classification in the existing coastal-bay lane instead of
+    // pretending the world is a continental interior.
+    if (this.landmask !== null && this.landmask(worldX, worldZ) < 0.05) {
+      return 'coastal_bay';
+    }
 
     // Coastal zone: bays are low-lying, coastal plains sit higher.
     if (cf < COASTAL_ZONE_CF) {

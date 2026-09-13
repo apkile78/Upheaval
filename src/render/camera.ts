@@ -45,7 +45,7 @@ export class CameraController {
       75, // field of view
       aspect,
       0.1, // near
-      1000, // far
+      5000, // far
     );
     this.perspectiveCamera.position.set(0, 1.7, 0); // eye height
 
@@ -55,7 +55,7 @@ export class CameraController {
       5,
       -5,
       0.1,
-      500,
+      5000,
     );
     this.orthographicCamera.position.set(12, 12, 12);
     this.orthographicCamera.lookAt(0, 0, 0);

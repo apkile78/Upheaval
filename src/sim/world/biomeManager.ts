@@ -6,6 +6,8 @@
  */
 
 import type { RegionBiases, TileTerrainType } from '../../types/world';
+import { createBasinModel, basinStaircase } from './basinModel';
+import { createContinentModel } from './continentModel';
 import { SimplexNoise, fbm, ridged, domainWarp, CoastPerturbationNoise, MAX_MOUNTAIN_ELEVATION, RIDGE_COAST_STEEPNESS, ELEVATION_SCALE, BASE_TERRAIN_WEIGHT, RIDGE_TERRAIN_WEIGHT, DETAIL_TERRAIN_WEIGHT, RIDGE_ELEVATION_EXPONENT, RIDGE_INLAND_START_X, RIDGE_INLAND_RAMP_X } from './noise';
 
 export interface BiomeInfo {
@@ -59,6 +61,8 @@ export class BiomeManager {
   private warpNoise: SimplexNoise;
   private detailNoise: SimplexNoise;
   private coastPerturbation: CoastPerturbationNoise;
+  private continentModel: ReturnType<typeof createContinentModel>;
+  private basinModel: ReturnType<typeof createBasinModel>;
   /** Optional region-bias provider (Step 6.6); null = unbiased generation. */
   private regionProvider: ((worldX: number, worldZ: number) => RegionBiases) | null = null;
 
@@ -69,6 +73,8 @@ export class BiomeManager {
     this.warpNoise = new SimplexNoise(seed + 3000);
     this.detailNoise = new SimplexNoise(seed + 4000);
     this.coastPerturbation = new CoastPerturbationNoise(seed);
+    this.continentModel = createContinentModel(seed);
+    this.basinModel = createBasinModel(this.continentModel.profile);
   }
 
   /**
@@ -86,6 +92,16 @@ export class BiomeManager {
     const moisture = this.getMoisture(worldX, worldZ);
     const type = this.classifyBiome(elevation, moisture);
     return { type, elevation, moisture };
+  }
+
+  /** Get the nearest procedural basin for a world coordinate. */
+  getBasinAt(worldX: number, worldZ: number) {
+    return this.basinModel.basinAt(worldX, worldZ);
+  }
+
+  /** Seed-generated landmask for the current continent profile. */
+  getLandmask(worldX: number, worldZ: number): number {
+    return this.continentModel.landmask(worldX, worldZ);
   }
 
   /** Get terrain surface elevation (Y height) at a world coordinate. */
@@ -139,6 +155,26 @@ export class BiomeManager {
     // Scale to world units, with coast factor applied last (so ocean stays calm
     // and the baseline lifts real terrain but not open-ocean speckle meaningfully).
     let elevationScaled = elevation * coastFactor * ELEVATION_SCALE;
+
+    // Phase 1 landmask: the seed-generated continent envelope keeps interior
+    // terrain land-locked while preserving ocean below sea level outside the
+    // seeded continent footprints. Only the deep interior is forced to land;
+    // the raw coastal/ocean baseline remains intact so the old open-water tests
+    // still describe the correct sea behavior.
+    const landmask = this.continentModel.landmask(worldX, worldZ);
+    if (landmask > 0.85 && elevationScaled < 0) {
+      elevationScaled = 0;
+    }
+
+    // Phase 2 basin staircase: apply a small, bounded basin baseline in the
+    // interior so the terrain follows seeded basin structure without
+    // overriding the existing coastline / ridge machinery.
+    const basin = this.basinModel.basinAt(worldX, worldZ);
+    if (basin !== null) {
+      const basinBase = basinStaircase(worldX, worldZ, basin, this.continentModel.landmask);
+      const inlandBlend = Math.max(0, 1 - coastFactor);
+      elevationScaled += basinBase * inlandBlend * 0.15;
+    }
 
     // Region bias (Step 6.6): multiplicative nudge, deterministic per seed.
     if (this.regionProvider !== null) {

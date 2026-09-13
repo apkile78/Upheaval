@@ -59,6 +59,7 @@ function bucketKey(bx: number, bz: number): string {
 export class RiverGenerator {
   private macro: MacroHeightmap;
   private coastFactor: CoastFactorFn;
+  private landmask: ((worldX: number, worldZ: number) => number) | null;
   private rngState: number;
   private rivers: RiverPath[] = [];
   private buckets: Map<string, Vector3D[]> = new Map();
@@ -70,9 +71,15 @@ export class RiverGenerator {
    * @param macro       - Coarse height sampler for descent tracing.
    * @param coastFactor - Coast gradient (0 = ocean, 1 = far inland).
    */
-  constructor(seed: number, macro: MacroHeightmap, coastFactor: CoastFactorFn) {
+  constructor(
+    seed: number,
+    macro: MacroHeightmap,
+    coastFactor: CoastFactorFn,
+    landmask?: (worldX: number, worldZ: number) => number,
+  ) {
     this.macro = macro;
     this.coastFactor = coastFactor;
+    this.landmask = landmask ?? null;
     this.rngState = (seed ^ 0x9e3779b9) >>> 0;
   }
 
@@ -97,6 +104,7 @@ export class RiverGenerator {
       const wx = SOURCE_X_MIN + this.nextRandom() * (SOURCE_X_MAX - SOURCE_X_MIN);
       const wz = (this.nextRandom() * 2 - 1) * WORLD_EXTENT;
       if (this.coastFactor(wx, wz) < INLAND_MIN_CF) continue;
+      if (this.landmask !== null && this.landmask(wx, wz) < 0.6) continue;
       if (this.macro.sampleHeight(wx, wz) < SOURCE_HEIGHT_MIN) continue;
       let tooClose = false;
       for (const s of sources) {
@@ -134,6 +142,7 @@ export class RiverGenerator {
     let prevX = x;
     let prevZ = z;
     for (let i = 0; i < MAX_DESCENT_STEPS; i++) {
+      if (this.landmask !== null && this.landmask(x, z) < 0.05) break;
       if (this.coastFactor(x, z) < OCEAN_CF) break;
 
       let bestX = x;

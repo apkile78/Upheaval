@@ -71,6 +71,52 @@ export interface WorldChunk {
 export type CoastFactorFn = (worldX: number, worldZ: number) => number;
 
 /**
+ * Seed-generated continent profile information.
+ * Phase 1 adds a deterministic landmask that isolates continental interiors
+ * from the ocean while leaving the existing coastline meander machinery intact.
+ */
+export interface ClimateField {
+  direction: number;
+  strength: number;
+  humidity: number;
+  rainShadow: number;
+}
+
+export interface ContinentSpec {
+  id: string;
+  centerX: number;
+  centerZ: number;
+  radiusX: number;
+  radiusZ: number;
+  strength: number;
+}
+
+export interface ContinentProfile {
+  seed: number;
+  continents: ContinentSpec[];
+  climate: ClimateField;
+  coastBias: number;
+}
+
+export interface BasinInfo {
+  id: BasinId;
+  continentId: string;
+  centerX: number;
+  centerZ: number;
+  headwaterX: number;
+  headwaterZ: number;
+  outletX: number;
+  outletZ: number;
+  outletType: OutletType;
+  width: number;
+  baseLevel: number;
+  dominantBiome: 'temperate_rainforest' | 'arid_plateau' | 'prairie' | 'swamp' | 'coastal_plain';
+}
+
+export type BasinId = string;
+export type OutletType = 'ocean' | 'endorheic' | 'lake';
+
+/**
  * A traced river path in world space. Points are ordered from source
  * (highland) to mouth (coastline); width is the full corridor width in
  * world units. Produced by RiverGenerator and consumed for tile carving.

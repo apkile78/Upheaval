@@ -25,6 +25,8 @@ import { HUDManager } from './render/ui/hudManager'
 
 /** Simulation timestep (60 Hz) in milliseconds. */
 const FIXED_DT_MS = 1000 / 60
+/** Active chunk radius for the world render window. */
+const CHUNK_RENDER_RADIUS = 5
 
 /** Singleton simulation manager. */
 let chunkManager!: ChunkManager
@@ -183,7 +185,7 @@ function getNeighbors(coord: { x: number; y: number; z: number }) {
 function init(): void {
   // 1. Simulation - initialise chunk manager and populate starter chunks
   chunkManager = new ChunkManager(42)
-  chunkManager.updateActiveChunks({ x: 0, y: 0, z: 0 }, 4)
+  chunkManager.updateActiveChunks({ x: 0, y: 0, z: 0 }, CHUNK_RENDER_RADIUS)
 
   // 2. Player state
   player = createInitialPlayer()

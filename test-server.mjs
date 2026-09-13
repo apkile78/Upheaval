@@ -9,6 +9,9 @@ import { RiverGenerator } from './src/sim/world/riverGenerator.js';
 import { carveRiverTiles, RIVER_HALF_WIDTH } from './src/sim/world/riverCarve.js';
 import { RegionMap, REGION_BIASES } from './src/sim/world/regionMap.js';
 import { ChunkManager } from './src/sim/world/chunkManager.js';
+import { createContinentModel } from './src/sim/world/continentModel.js';
+import { createBasinModel } from './src/sim/world/basinModel.js';
+import { createElevationModel } from './src/sim/world/elevationModel.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const distDir = join(__dirname, 'dist');
@@ -39,6 +42,36 @@ function check(name, cond, detail) {
     console.error('[pipeline] FAIL: ' + name + (detail ? ' (' + detail + ')' : ''));
   }
 }
+
+const continentModel = createContinentModel(42);
+const landmaskInteriorSamples = [
+  [0.3, 0.3],
+  [1000, 0],
+  [-300, 600],
+  [0, 1500],
+];
+let interiorLand = true;
+for (const [x, z] of landmaskInteriorSamples) {
+  if (continentModel.landmask(x, z) < 0.8) interiorLand = false;
+}
+check('continent landmask keeps seeded interiors land', interiorLand);
+
+const basinModel = createBasinModel(continentModel.profile);
+check('procedural basin model returns multiple basins', basinModel.basinCount >= 2, 'basinCount=' + basinModel.basinCount);
+
+const elevationModel = createElevationModel(42);
+let bandedElevation = false;
+for (let x = -1600; x <= 1600; x += 200) {
+  for (let z = -1600; z <= 1600; z += 200) {
+    const e = elevationModel.elevation(x, z);
+    if (e > 0 && e < 2000) {
+      bandedElevation = true;
+      break;
+    }
+  }
+  if (bandedElevation) break;
+}
+check('staircase elevation model yields banded terrain', bandedElevation);
 
 const plainBiome = new BiomeManager(42);
 const biasedBiome = new BiomeManager(42);
@@ -72,7 +105,12 @@ const cmA = new ChunkManager(42);
 const cmB = new ChunkManager(42);
 
 const coastFactorProbe = (wx, wz) => plainBiome.getCoastFactor(wx, wz);
-const riverProbe = new RiverGenerator(42, new MacroHeightmap(42, coastFactorProbe), coastFactorProbe);
+const riverProbe = new RiverGenerator(
+  42,
+  new MacroHeightmap(42, coastFactorProbe),
+  coastFactorProbe,
+  continentModel.landmask,
+);
 riverProbe.generate();
 
 const coords = [];
@@ -127,7 +165,7 @@ for (let z = 0; z < 16; z++) {
 check('adjacent chunks agree on shared world coordinates (no seams)', seamOk);
 
 const coastFactorFn = (wx, wz) => plainBiome.getCoastFactor(wx, wz);
-const rg = new RiverGenerator(42, new MacroHeightmap(42, coastFactorFn), coastFactorFn);
+const rg = new RiverGenerator(42, new MacroHeightmap(42, coastFactorFn), coastFactorFn, continentModel.landmask);
 rg.generate();
 
 let crossingsChecked = 0;
