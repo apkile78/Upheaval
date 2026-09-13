@@ -61,3 +61,45 @@ export interface WorldChunk {
   tiles: TerrainTile[][][];
   seed: number;
 }
+
+/**
+ * Function returning the coast factor for a world coordinate:
+ * 0 = ocean/east, 1 = far inland/west. Implemented by
+ * BiomeManager.getCoastFactor (meandering coastline, Step 6.2) and consumed
+ * by macro-scale systems (rivers, regions).
+ */
+export type CoastFactorFn = (worldX: number, worldZ: number) => number;
+
+/**
+ * A traced river path in world space. Points are ordered from source
+ * (highland) to mouth (coastline); width is the full corridor width in
+ * world units. Produced by RiverGenerator and consumed for tile carving.
+ */
+export interface RiverPath {
+  points: Vector3D[];
+  width: number;
+}
+
+/**
+ * Procedural region archetypes (Step 6.5). Each chunk location is classified
+ * into exactly one archetype; the associated biases nudge - never override -
+ * the base elevation / moisture / vegetation noise output.
+ */
+export type RegionArchetype =
+  | 'coastal_bay'
+  | 'river_valley'
+  | 'upland_plain'
+  | 'ridge_highland'
+  | 'coastal_plain';
+
+/**
+ * Per-archetype generation biases.
+ * - elevationBias: multiplicative nudge on biome elevation (added to 1).
+ * - moistureBias:  additive nudge on moisture (clamped to [0, 1]).
+ * - vegetationBias: reserved for vegetation-density systems (Step 6.7+).
+ */
+export interface RegionBiases {
+  elevationBias: number;
+  moistureBias: number;
+  vegetationBias: number;
+}

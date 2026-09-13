@@ -5,6 +5,74 @@
  * Architecture: /src/sim/ layer — no rendering imports.
  */
 
+// ---------------------------------------------------------------------------
+// Ridge shaping constants (Step 6 tuning - exposed for by-eye adjustment)
+// ---------------------------------------------------------------------------
+
+/** Exponent on |noise| for the low-frequency massif octave (1 - m^E). */
+export const RIDGE_MASSIF_EXPONENT = 2.0;
+
+/**
+ * Exponent on (1 - |noise|) for high-frequency crag octaves. Lower than 2
+ * rounds off summit tops (widens the near-peak zone) while the massif
+ * octave keeps the broad/foothill shape. Tunable: 2.0 = sharp spires,
+ * ~1.3 = rounded summits.
+ */
+export const RIDGE_CRAG_EXPONENT = 1.3;
+
+/**
+ * Relative amplitude weight of the massif octave versus the fractal gain,
+ * so peaks read as rounded summits on a broad base rather than spires.
+ */
+export const RIDGE_MASSIF_WEIGHT = 1.15;
+
+/**
+ * Absolute ceiling on the combined ridge signal (before it is scaled by
+ * the coast factor). Clamps stacked-octave ridge massifs so their peak
+ * never exceeds the realistic mountain bands defined in the biome table.
+ */
+export const MAX_MOUNTAIN_ELEVATION = 2200;
+/**
+ * Ridge coast steepness: the ridge massif is suppressed faster than the
+ * base rolling-hill terrain near the coastline, so a clear foothill buffer
+ * zone (-> flat coast -> foothills -> real mountains) develops.
+ * Effective ridge amplitude falloff ~ coastFactor^RIDGE_COAST_STEEPNESS
+ * vs the base FBM terrain ~ coastFactor^1.
+ */
+export const RIDGE_COAST_STEEPNESS = 2.0;
+
+/** Final world-unit scale for elevation (recalibrated so genuine ridge
+ *  crests reach the stone/snow biome bands at full inland coast factor).
+ */
+export const ELEVATION_SCALE = 2000;
+
+/** Weight of base FBM rolling-hill terrain in the elevation combine. */
+export const BASE_TERRAIN_WEIGHT = 0.15;
+
+/** Weight of the ridge massif in the elevation combine (dominant term). */
+export const RIDGE_TERRAIN_WEIGHT = 1.0;
+
+/** Weight of high-frequency detail noise in the elevation combine. */
+export const DETAIL_TERRAIN_WEIGHT = 0.03;
+
+/** Inland X where ridge massifs may begin (~city of foothill buffer end).
+ *  Below this effective longitude (meander-adjusted), ridge amplitude is
+ *  forced to zero, guaranteeing no high country reaches the coastal plain
+ *  regardless of meander or octave stacking.
+ */
+export const RIDGE_INLAND_START_X = 550;
+
+/** Ramp width of the ridge inland gate (smoothstep over this distance).
+ *  Keeps the transition legal without seams when the gate is active.
+ */
+export const RIDGE_INLAND_RAMP_X = 250;
+
+/** Power curve on the 0..1 ridge signal before weighting: suppresses
+ *  mid-slope ridge values so only true massif crests reach stone/snow,
+ *  while valleys stay in grass/forest. Must stay > 1.
+ */
+export const RIDGE_ELEVATION_EXPONENT = 12.0;
+
 const F2 = 0.5 * (Math.sqrt(3) - 1);
 const G2 = (3 - Math.sqrt(3)) / 6;
 
@@ -84,13 +152,36 @@ export function fbm(noise: SimplexNoise, x: number, y: number, octaves: number, 
   return value / maxValue;
 }
 
-/** Ridged noise - creates sharp mountain ridges. */
+/**
+ * Ridged multifractal - builds mountain massifs, not single spike crests.
+ *
+ * Two anti-mohawk measures on top of the fractal sum:
+ * 1. Power curve: each octave's ridge value is squared, sharpening the crest
+ *    while broadening the base (wide-base/narrow-peak taper instead of a
+ *    razor-thin spike with symmetric steep falloff).
+ * 2. Spectral weighting: each octave is gated by the previous one's ridge
+ *    strength, so high-frequency peaks/crags only appear INSIDE the broad
+ *    low-frequency massif footprint. Outside the massif the octaves collapse
+ *    to zero, blending smoothly into surrounding rolling terrain (no seam).
+ */
 export function ridged(noise: SimplexNoise, x: number, y: number, octaves: number, lacunarity: number, gain: number): number {
-  let value = 0, amplitude = 1, frequency = 1, maxValue = 0;
+  let value = 0, amplitude = 1, frequency = 1, maxValue = 0, filter = 1;
   for (let i = 0; i < octaves; i++) {
-    const n = 1 - Math.abs(noise.noise2D(x * frequency, y * frequency));
-    value += n * n * amplitude;
-    maxValue += amplitude;
+    const m = Math.abs(noise.noise2D(x * frequency, y * frequency));
+    // Power curve, octave-aware (exponents/weights are tuned constants):
+    // the LOW octave uses 1 - m^RIDGE_MASSIF_EXPONENT for a broad massif with
+    // shoulders; higher octaves use (1 - m)^RIDGE_CRAG_EXPONENT - below 2 this
+    // rounds summit tops instead of producing sharp spires.
+    let n = i === 0
+      ? 1 - Math.pow(m, RIDGE_MASSIF_EXPONENT)
+      : Math.pow(1 - m, RIDGE_CRAG_EXPONENT);
+    n *= filter; // spectral weighting: crags only within the massif
+    filter = Math.min(1, n * 1.5);
+    // Massif octave weighted up (RIDGE_MASSIF_WEIGHT) so the broad base
+    // dominates the fractal sum and summits read rounded.
+    const amp = i === 0 ? amplitude * RIDGE_MASSIF_WEIGHT : amplitude;
+    value += n * amp;
+    maxValue += amp;
     amplitude *= gain;
     frequency *= lacunarity;
   }

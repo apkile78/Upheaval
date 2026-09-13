@@ -6,6 +6,10 @@
 
 import type { ChunkCoordinate, TerrainTile, WorldChunk } from '../../types/world';
 import { BiomeManager } from './biomeManager';
+import { MacroHeightmap } from './macroHeightmap';
+import { RiverGenerator } from './riverGenerator';
+import { carveRiverTiles } from './riverCarve';
+import { RegionMap, REGION_BIASES } from './regionMap';
 
 export const CHUNK_SIZE = 16;
 
@@ -17,10 +21,24 @@ interface ChunkData {
 export class ChunkManager {
   private activeChunks: Map<string, ChunkData>;
   private biomeManager: BiomeManager;
+  private riverGenerator: RiverGenerator;
 
   constructor(baseSeed: number = 0) {
     this.activeChunks = new Map();
     this.biomeManager = new BiomeManager(baseSeed);
+
+    // Macro-scale systems (Step 6.3/6.4): coarse sampler + deterministic
+    // river tracing, both driven by the meandering coast factor (Step 6.2).
+    const coastFactor = (wx: number, wz: number): number => this.biomeManager.getCoastFactor(wx, wz);
+    const macro = new MacroHeightmap(baseSeed, coastFactor);
+    this.riverGenerator = new RiverGenerator(baseSeed, macro, coastFactor);
+    this.riverGenerator.generate();
+
+    // Region classification (Step 6.5/6.6): biases chunk generation nudging
+    // elevation/moisture output - never overriding the base noise - based on
+    // the archetype at each location, alongside intersecting river data.
+    const regionMap = new RegionMap(baseSeed, macro, coastFactor, this.riverGenerator);
+    this.biomeManager.setRegionProvider((wx: number, wz: number) => REGION_BIASES[regionMap.getRegionAt(wx, wz)]);
   }
 
   generateChunk(coord: ChunkCoordinate): ChunkData {
@@ -46,10 +64,22 @@ export class ChunkManager {
       tiles.push(column);
     }
 
-    return {
-      chunk: { coordinate: { ...coord }, tiles, seed: 0 },
-      heightmap,
-    };
+    const chunk = { coordinate: { ...coord }, tiles, seed: 0 };
+
+    // River carving (Step 6.4): if any traced river path passes near this
+    // chunk's bounds, carve its surface tiles to 'water'. Heightmap is left
+    // untouched so terrain-follow physics and render meshes stay consistent.
+    const pad = 128;
+    const minX = coord.x * CHUNK_SIZE - pad;
+    const maxX = (coord.x + 1) * CHUNK_SIZE + pad;
+    const minZ = coord.z * CHUNK_SIZE - pad;
+    const maxZ = (coord.z + 1) * CHUNK_SIZE + pad;
+    const riverPoints = this.riverGenerator.getRiverPointsNear(minX, minZ, maxX, maxZ);
+    if (riverPoints.length > 0) {
+      carveRiverTiles(chunk, riverPoints);
+    }
+
+    return { chunk, heightmap };
   }
 
   private generateTile(_worldX: number, worldY: number, _worldZ: number, surfaceHeight: number): TerrainTile {
