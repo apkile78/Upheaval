@@ -11,6 +11,34 @@
 import type { Entity, TransformComponent, RenderableComponent } from '../types/ecs';
 import type { PlayerState } from '../types/player';
 import type { Simulation } from './simulation';
+import { EARTH_SPAWN } from './world/earth/earthConfig';
+
+/** Body parts with full health (shared by the initial state factory). */
+const FULL_HEALTH_PARTS = {
+  head: 100, torso: 100, leftArm: 100, rightArm: 100, leftLeg: 100, rightLeg: 100,
+};
+
+/**
+ * Create the initial player state, spawned at the configured Earth location
+ * (real-world latitude/longitude, 1 game unit = 1 meter). Y is resolved by
+ * the terrain-follow physics on the first tick.
+ */
+export function createInitialPlayer(): PlayerState {
+  return {
+    id: 'player-001',
+    name: 'Survivor',
+    health: 100,
+    maxHealth: 100,
+    bodyPartHealth: { ...FULL_HEALTH_PARTS },
+    bodyPartMaxHealth: { ...FULL_HEALTH_PARTS },
+    inventory: { items: [], capacity: 100 },
+    transform: {
+      position: { x: EARTH_SPAWN.x, y: 0, z: EARTH_SPAWN.z },
+      rotation: { x: 0, y: 0, z: 0 },
+    },
+    cameraMode: 'isometric',
+  };
+}
 
 /**
  * Create the player entity in ECS with Transform + Renderable components.

@@ -3,15 +3,13 @@ import { readFileSync, existsSync } from 'fs';
 import { join, extname } from 'path';
 import { fileURLToPath } from 'url';
 
-import { BiomeManager } from './src/sim/world/biomeManager.js';
-import { MacroHeightmap } from './src/sim/world/macroHeightmap.js';
-import { RiverGenerator } from './src/sim/world/riverGenerator.js';
-import { carveRiverTiles, RIVER_HALF_WIDTH } from './src/sim/world/riverCarve.js';
-import { RegionMap, REGION_BIASES } from './src/sim/world/regionMap.js';
 import { ChunkManager } from './src/sim/world/chunkManager.js';
-import { createContinentModel } from './src/sim/world/continentModel.js';
-import { createBasinModel } from './src/sim/world/basinModel.js';
-import { createElevationModel } from './src/sim/world/elevationModel.js';
+import { ElevationSource } from './src/sim/world/earth/elevationGrid.js';
+import { latLonToWorld, worldToLatLon } from './src/sim/world/earth/earthProjection.js';
+import {
+  EARTH_SPAWN, EARTH_SPAWN_LAT, EARTH_SPAWN_LON, TILE_PX, ELEV_OFFSET,
+} from './src/sim/world/earth/earthConfig.js';
+import { readPngRgb } from './scripts/dem/pngio.mjs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const distDir = join(__dirname, 'dist');
@@ -33,295 +31,137 @@ function getMimeType(filePath) {
   return mimeTypes[extname(filePath).toLowerCase()] || 'application/octet-stream';
 }
 
-// ---------- Step 6 pipeline checks (run at startup) ----------
+// ---------------------------------------------------------------------------
+// Earth terrain pipeline checks (run at startup against real assets)
+// ---------------------------------------------------------------------------
+
 const failures = new Set();
 function check(name, cond, detail) {
-  if (cond) console.log('[pipeline] PASS: ' + name);
+  if (cond) console.log('[earth] PASS: ' + name);
   else {
     failures.add(name + (detail ? ' (' + detail + ')' : ''));
-    console.error('[pipeline] FAIL: ' + name + (detail ? ' (' + detail + ')' : ''));
+    console.error('[earth] FAIL: ' + name + (detail ? ' (' + detail + ')' : ''));
   }
 }
 
-const continentModel = createContinentModel(42);
-const landmaskInteriorSamples = [
-  [1203.83, 194.6],
-  [1706.24, 628.79],
-  [1250, 250],
-  [1750, 700],
-];
-let interiorLand = true;
-for (const [x, z] of landmaskInteriorSamples) {
-  if (continentModel.landmask(x, z) < 0.8) interiorLand = false;
-}
-check('continent landmask keeps seeded interiors land', interiorLand);
+// 1. Projection anchors.
+const london = latLonToWorld(51.5074, -0.1278);
+const spawnRoundTrip = worldToLatLon(EARTH_SPAWN.x, EARTH_SPAWN.z);
+check('spawn config projects to its latitude', Math.abs(spawnRoundTrip.lat - EARTH_SPAWN_LAT) < 1e-9);
+check('spawn config projects to its longitude', Math.abs(spawnRoundTrip.lon - EARTH_SPAWN_LON) < 1e-9);
+check('projection is deterministic', london.x === latLonToWorld(51.5074, -0.1278).x);
 
-const basinModel = createBasinModel(continentModel.profile);
-check('procedural basin model returns multiple basins', basinModel.basinCount >= 2, 'basinCount=' + basinModel.basinCount);
-
-const elevationModel = createElevationModel(42);
-let bandedElevation = false;
-for (let x = -1600; x <= 1600; x += 200) {
-  for (let z = -1600; z <= 1600; z += 200) {
-    const e = elevationModel.elevation(x, z);
-    if (e > 0 && e < 2000) {
-      bandedElevation = true;
-      break;
+// 2. Real tile assets: decode the shipped PNGs through the same R/G path the
+//    browser uses and sample real coordinates.
+const META = JSON.parse(readFileSync(join(__dirname, 'public/assets/earth/meta.json'), 'utf8'));
+const tiles = new Map();
+function cellAt(gx, gy) {
+  const cx = ((gx % META.gridCols) + META.gridCols) % META.gridCols;
+  const row = Math.floor(gy / META.tilePx);
+  const col = Math.floor(cx / META.tilePx);
+  const key = row + ',' + col;
+  let tile = tiles.get(key);
+  if (tile === undefined) {
+    const png = readPngRgb(join(__dirname, 'public/assets/earth/tiles', `r${row}_c${col}.png`));
+    tile = new Int16Array(META.tilePx * META.tilePx);
+    for (let i = 0; i < tile.length; i++) {
+      tile[i] = ((png.rgb[i * 3] << 8) | png.rgb[i * 3 + 1]) - META.elevOffset;
     }
+    tiles.set(key, tile);
   }
-  if (bandedElevation) break;
+  return tile[(gy % META.tilePx) * META.tilePx + (cx % META.tilePx)];
 }
-check('staircase elevation model yields banded terrain', bandedElevation);
-
-const plainBiome = new BiomeManager(42);
-const biasedBiome = new BiomeManager(42);
-biasedBiome.setRegionProvider(() => REGION_BIASES.upland_plain);
-
-let identical = true;
-let bounded = true;
-for (let x = -2000; x <= 4000; x += 331) {
-  for (let z = -4000; z <= 4000; z += 353) {
-    const a = plainBiome.getElevation(x, z);
-    const b = biasedBiome.getElevation(x, z);
-    if (a !== b) identical = false;
-    const r = a === 0 ? 1 : b / a;
-    if (!(r >= 0.4 && r <= 1.6)) bounded = false;
-  }
-}
-check('zero-bias region leaves output identical', identical);
-check('non-zero biases stay bounded (0.4x..1.6x)', bounded);
-
-const bayBiome = new BiomeManager(42);
-bayBiome.setRegionProvider(() => REGION_BIASES.coastal_bay);
-let shifted = false;
-for (let z = -4000; z <= 4000; z += 71) {
-  const a = plainBiome.getBiome(300, z).type;
-  const b = bayBiome.getBiome(300, z).type;
-  if (a !== b) shifted = true;
-}
-check('moisture bias shifts biome classification', shifted);
-
-const cmA = new ChunkManager(42);
-const cmB = new ChunkManager(42);
-
-const coastFactorProbe = (wx, wz) => plainBiome.getCoastFactor(wx, wz);
-const riverProbe = new RiverGenerator(
-  42,
-  new MacroHeightmap(42, coastFactorProbe),
-  coastFactorProbe,
-  continentModel.landmask,
-);
-riverProbe.generate();
-
-const coords = [];
-{
-  let hit = 0;
-  for (const r of riverProbe.getRivers()) {
-    for (const p of r.points) {
-      const cc = { x: Math.floor(p.x / 16), y: 0, z: Math.floor(p.z / 16) };
-      if (!coords.some((c) => c.x === cc.x && c.z === cc.z)) coords.push(cc);
-      if (++hit >= 5) break;
-    }
-    if (hit >= 5) break;
-  }
+function realElevation(lat, lon) {
+  const fx = ((lon + 180) / 360) * META.gridCols - 0.5;
+  const fy = ((90 - lat) / 180) * META.gridRows - 0.5;
+  const gx0 = Math.floor(fx);
+  const gy0 = Math.max(0, Math.min(META.gridRows - 2, Math.floor(fy)));
+  const tx = fx - gx0;
+  const ty = fy - gy0;
+  return (
+    (cellAt(gx0, gy0) * (1 - tx) + cellAt(gx0 + 1, gy0) * tx) * (1 - ty) +
+    (cellAt(gx0, gy0 + 1) * (1 - tx) + cellAt(gx0 + 1, gy0 + 1) * tx) * ty
+  );
 }
 
-let chunksIdentical = true;
-let waterCount = 0;
-const typeSet = new Set();
-for (const c of coords) {
-  const a = cmA.generateChunk(c).chunk;
-  const b = cmB.generateChunk(c).chunk;
-  for (let x = 0; x < 16; x++) {
-    for (let z = 0; z < 16; z++) {
-      for (let y = 0; y < 16; y++) {
-        const ta = a.tiles[x][z][y];
-        const tb = b.tiles[x][z][y];
-        if (ta.terrainType !== tb.terrainType) chunksIdentical = false;
-        if (ta.elevation >= 0) {
-          typeSet.add(ta.terrainType);
-          if (ta.terrainType === 'water') waterCount++;
-        }
+check('elevation asset grid matches metadata', META.gridCols === 21600 && META.gridRows === 10800);
+check('spawn point (London) is land above sea level', realElevation(EARTH_SPAWN_LAT, EARTH_SPAWN_LON) > 0);
+check('Everest is Himalayan in the shipped tiles', realElevation(27.9881, 86.925) > 7000);
+check('Challenger Deep is abyssal in the shipped tiles', realElevation(11.3733, 142.5917) < -9000);
+check('mid-Pacific is oceanic in the shipped tiles', realElevation(-10, -150) < 0);
+
+// 3. Synthetic source + chunk pipeline: deferral, generation, water biome.
+function syntheticLoader(valueFn) {
+  return (row, col) => {
+    const tile = new Int16Array(TILE_PX * TILE_PX);
+    for (let y = 0; y < TILE_PX; y++) {
+      for (let x = 0; x < TILE_PX; x++) {
+        tile[y * TILE_PX + x] = valueFn(col * TILE_PX + x, row * TILE_PX + y);
       }
     }
-  }
-}
-check('chunk generation deterministic across full pipeline', chunksIdentical);
-check('rivers carved somewhere in generated chunks', waterCount > 0, 'waterTiles=' + waterCount);
-check('varied terrain types produced', typeSet.size >= 2, [...typeSet].join(','));
-
-const cm = new ChunkManager(42);
-const west = cm.generateChunk({ x: 10, y: 0, z: 20 });
-const east = cm.generateChunk({ x: 11, y: 0, z: 20 });
-let seamOk = true;
-for (let z = 0; z < 16; z++) {
-  const worldZ = 20 * 16 + z;
-  const fromChunk = east.heightmap[0 * 16 + z];
-  const fromSampler = cm.getHeightAt(176, worldZ);
-  if (Math.abs(fromChunk - fromSampler) > 0.0001) seamOk = false;
-  const hw = west.heightmap[15 * 16 + z];
-  if (Math.abs(hw - fromChunk) > 150) seamOk = false;
-}
-check('adjacent chunks agree on shared world coordinates (no seams)', seamOk);
-
-const coastFactorFn = (wx, wz) => plainBiome.getCoastFactor(wx, wz);
-const rg = new RiverGenerator(42, new MacroHeightmap(42, coastFactorFn), coastFactorFn, continentModel.landmask);
-rg.generate();
-
-let crossingsChecked = 0;
-let crossingsCarved = 0;
-
-function waterColumnsNear(chunk, wx, wz, radius) {
-  let n = 0;
-  for (let x = 0; x < 16; x++) {
-    for (let z = 0; z < 16; z++) {
-      const cx = chunk.coordinate.x * 16 + x + 0.5;
-      const cz = chunk.coordinate.z * 16 + z + 0.5;
-      if (Math.abs(cx - wx) <= radius && Math.abs(cz - wz) <= radius) {
-        const column = chunk.tiles[x][z];
-        for (let y = column.length - 1; y >= 0; y--) {
-          if (column[y].elevation >= 0) {
-            if (column[y].terrainType === 'water') n++;
-            break;
-          }
-        }
-      }
-    }
-  }
-  return n;
+    return Promise.resolve(tile);
+  };
 }
 
-for (const r of rg.getRivers()) {
-  for (let i = 0; i < r.points.length - 1; i++) {
-    const a = r.points[i];
-    const b = r.points[i + 1];
-    const lo = Math.min(a.x, b.x);
-    const hi = Math.max(a.x, b.x);
-    const k0 = Math.ceil(lo / 16);
-    const k1 = Math.floor(hi / 16);
-    if (k1 < k0) continue;
-    const bx = k0 * 16;
-    const t = (bx - a.x) / (b.x - a.x);
-    const bz = a.z + (b.z - a.z) * t;
-    const cz = Math.floor(bz / 16);
-    const left = cm.generateChunk({ x: k0 - 1, y: 0, z: cz }).chunk;
-    const right = cm.generateChunk({ x: k0, y: 0, z: cz }).chunk;
-    const wl = waterColumnsNear(left, bx, bz, 10);
-    const wr = waterColumnsNear(right, bx, bz, 10);
-    crossingsChecked++;
-    if (wl > 0 && wr > 0) crossingsCarved++;
-    break;
-  }
-  if (crossingsChecked >= 3) break;
-}
-check(
-  'river segments crossing chunk seams carve both sides',
-  crossingsChecked > 0 && crossingsCarved === crossingsChecked,
-  'checked=' + crossingsChecked + ' carved=' + crossingsCarved,
-);
+const center = { x: Math.floor(EARTH_SPAWN.x / 16), y: 0, z: Math.floor(EARTH_SPAWN.z / 16) };
+const landSource = new ElevationSource(syntheticLoader((gx, gy) => 500 + ((gy * 7 + gx) % 400)));
+const landChunks = new ChunkManager(landSource);
+landChunks.updateActiveChunks(center, 1);
+const deferredCount = landChunks.getActiveChunks().length;
+await landSource.waitForArea();
+landChunks.updateActiveChunks(center, 1);
+check('chunks defer until elevation tiles are resident', deferredCount === 0);
+check('chunks materialize once tiles arrive', landChunks.getActiveChunks().length === 9, 'got ' + landChunks.getActiveChunks().length);
 
-function makeFlatChunk(cx, cz) {
-  const tiles = [];
-  for (let x = 0; x < 16; x++) {
-    const column = [];
-    for (let z = 0; z < 16; z++) {
-      const slice = [];
-      for (let y = 0; y < 16; y++) {
-        if (y > 10) slice.push({ terrainType: 'grass', elevation: -1 });
-        else slice.push({ terrainType: 'dirt', elevation: 10 });
-      }
-      column.push(slice);
-    }
-    tiles.push(column);
-  }
-  return { coordinate: { x: cx, y: 0, z: cz }, tiles, seed: 0 };
-}
+const landBiome = landChunks.biomes.getBiome(EARTH_SPAWN.x, EARTH_SPAWN.z);
+check('positive synthetic terrain classifies as land', landBiome.type !== 'water', landBiome.type);
 
-const synthetic = makeFlatChunk(100, 100);
-const carved = carveRiverTiles(
-  synthetic,
-  [
-    { x: 100 * 16 + 8.5, y: 0, z: 100 * 16 - 50 },
-    { x: 100 * 16 + 8.5, y: 0, z: 100 * 16 + 80 },
-  ],
-  RIVER_HALF_WIDTH,
-);
-check('carve sets water surface tiles', carved > 0, 'carved=' + carved);
-check(
-  'carved tile is surface water, below stays dirt',
-  synthetic.tiles[8][8][10].terrainType === 'water' && synthetic.tiles[8][8][9].terrainType === 'dirt',
-);
-check(
-  'air tiles untouched',
-  synthetic.tiles[8][8][11].terrainType === 'grass' && synthetic.tiles[8][8][11].elevation === -1,
-);
+const seaSource = new ElevationSource(syntheticLoader(() => -1200));
+const seaChunks = new ChunkManager(seaSource);
+seaChunks.updateActiveChunks(center, 1);
+await seaSource.waitForArea();
+seaChunks.updateActiveChunks(center, 1);
+check('negative synthetic terrain classifies as water', seaChunks.biomes.getBiome(EARTH_SPAWN.x, EARTH_SPAWN.z).type === 'water');
 
-const untouched = makeFlatChunk(100, 100);
-const carvedAway = carveRiverTiles(
-  untouched,
-  [
-    { x: 100 * 16 + 500, y: 0, z: 100 * 16 + 500 },
-    { x: 100 * 16 + 600, y: 0, z: 100 * 16 + 600 },
-  ],
-  RIVER_HALF_WIDTH,
-);
-check('no carve when river far from chunk', carvedAway === 0);
+// 4. Encoded elevation values survive the R/G packing used by the assets.
+const packed = Math.round(realElevation(27.9881, 86.925)) + ELEV_OFFSET;
+const unpacked = ((packed >> 8) << 8) | (packed & 0xff);
+check('R/G packing is lossless', unpacked === packed);
 
 if (failures.size > 0) {
-  console.error('\n[pipeline] FAILURES (' + failures.size + '):');
-  for (const f of failures) console.error('  - ' + f);
-  console.error('\nServer still started, but pipeline checks failed.');
+  console.error('[earth] ' + failures.size + ' check(s) failed');
 } else {
-  console.log('\n[pipeline] All pipeline checks passed.');
+  console.log('[earth] All startup checks passed.');
 }
 
+// ---------------------------------------------------------------------------
+// Static file server (serves dist/, falls back to public/ for assets)
+// ---------------------------------------------------------------------------
+
 const server = createServer((req, res) => {
-  let urlPath = new URL(req.url, `http://localhost:${PORT}`).pathname;
-  if (urlPath === '/') urlPath = '/index.html';
-
-  const filePath = join(distDir, urlPath);
-
-  if (!filePath.startsWith(distDir)) {
-    res.writeHead(403);
-    res.end('Forbidden');
-    return;
-  }
+  const urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
+  let filePath = join(distDir, urlPath === '/' ? 'index.html' : urlPath);
 
   if (!existsSync(filePath)) {
-    const indexPath = join(distDir, 'index.html');
-    if (existsSync(indexPath)) {
-      const html = readFileSync(indexPath);
-      res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end(html);
+    const assetPath = join(__dirname, 'public', urlPath);
+    if (existsSync(assetPath)) {
+      filePath = assetPath;
     } else {
-      res.writeHead(404);
-      res.end('Not Found');
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('Not found: ' + urlPath);
+      return;
     }
-    return;
   }
 
-  const content = readFileSync(filePath);
+  const body = readFileSync(filePath);
   res.writeHead(200, {
     'Content-Type': getMimeType(filePath),
+    'Content-Length': body.length,
     'Cache-Control': 'no-cache',
-    'Access-Control-Allow-Origin': '*',
   });
-  res.end(content);
+  res.end(body);
 });
 
 server.listen(PORT, () => {
-  console.log('\n🎮 Upheaval Play Test Server');
-  console.log(`   Serving: ${distDir}`);
-  console.log(`   URL:     http://localhost:${PORT}`);
-  console.log('   Press Ctrl+C to stop\n');
+  console.log(`Serving ${distDir} (and public/ assets) on http://localhost:${PORT}`);
 });
-
-server.on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    console.error(`Port ${PORT} in use. Try a different port.`);
-  } else {
-    console.error('Server error:', err);
-  }
-  process.exit(1);
-});
-

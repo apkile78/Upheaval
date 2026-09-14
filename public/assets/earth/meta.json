@@ -1,0 +1,12 @@
+{
+  "gridCols": 21600,
+  "gridRows": 10800,
+  "cellArcSec": 60,
+  "tilePx": 2160,
+  "tilesX": 10,
+  "tilesY": 5,
+  "elevOffset": 11000,
+  "minElev": -10752,
+  "maxElev": 8157,
+  "source": "NOAA ETOPO 2022 v1, 60 arc-second ice surface, public domain (DOI: 10.25921/fd45-gt74)"
+}
