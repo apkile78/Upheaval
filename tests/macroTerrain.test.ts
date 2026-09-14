@@ -5,7 +5,13 @@
  * Plain TypeScript, no test-runner dependency. Run via scripts/run-tests.mjs.
  */
 
-import { buildMacroTileGeometry, MACRO_TILE_SIZE, MACRO_GRID_POINTS, MACRO_HALF_TILES } from '../src/render/macroGeometry';
+import {
+  buildMacroTileGeometry,
+  intersectsVoxelBox,
+  MACRO_NEAR_RING,
+  MACRO_FAR_RING,
+  VOXEL_SKIP_HALF,
+} from '../src/render/macroGeometry';
 import { ElevationSource, TileLoader } from '../src/sim/world/earth/elevationGrid';
 import { TILE_PX } from '../src/sim/world/earth/earthConfig';
 import { frameAnchor } from '../src/render/frameAnchor';
@@ -46,28 +52,42 @@ async function main(): Promise<void> {
 
   // Tiles covering world cols/rows the macro neighborhood will sample.
   const source = new ElevationSource(makeLoader());
-  source.requestArea(0, 0, MACRO_TILE_SIZE * 2, MACRO_TILE_SIZE * 2);
+  source.requestArea(0, 0, 1024 * 2, 1024 * 2);
   await source.waitForArea();
-  check('synthetic tiles are resident', source.isReady(0, 0, MACRO_TILE_SIZE * 2, MACRO_TILE_SIZE * 2));
+  check('synthetic tiles are resident', source.isReady(0, 0, 1024 * 2, 1024 * 2));
 
-  // 1. Macro tile geometry: expected vertex/index counts.
-  const geometry = buildMacroTileGeometry(source, 0, 0);
-  const positions = geometry.getAttribute('position');
-  const colors = geometry.getAttribute('color');
-  const indices = geometry.getIndex();
-  check('macro tile has 33x33 vertices', positions.count === MACRO_GRID_POINTS * MACRO_GRID_POINTS, 'got ' + positions.count);
-  check('macro tile has per-vertex colors', colors.count === MACRO_GRID_POINTS * MACRO_GRID_POINTS);
-  check('macro tile has 32x32 quads as triangles', (indices?.count ?? 0) === 32 * 32 * 6, 'got ' + (indices?.count ?? -1));
+  // 1. Macro tile geometry: expected vertex/index counts for both ring sizes.
+  for (const ring of [MACRO_NEAR_RING, MACRO_FAR_RING]) {
+    const geometry = buildMacroTileGeometry(source, 0, 0, ring.tileSize, ring.gridPoints);
+    const positions = geometry.getAttribute('position');
+    const colors = geometry.getAttribute('color');
+    const indices = geometry.getIndex();
+    const want = ring.gridPoints * ring.gridPoints;
+    check(
+      'macro tile ' + ring.tileSize + 'm has a full vertex grid',
+      positions.count === want && colors.count === want,
+      'got ' + positions.count,
+    );
+    check(
+      'macro tile ' + ring.tileSize + 'm has quads as triangles',
+      (indices?.count ?? 0) === (ring.gridPoints - 1) * (ring.gridPoints - 1) * 6,
+      'got ' + (indices?.count ?? -1),
+    );
+    geometry.dispose();
+  }
 
   // 2. Vertex heights match the bilinear source at the macro sample points.
+  const geometry = buildMacroTileGeometry(source, 0, 0, MACRO_NEAR_RING.tileSize, MACRO_NEAR_RING.gridPoints);
+  const positions = geometry.getAttribute('position');
+  const colors = geometry.getAttribute('color');
   const posArray = positions.array as Float32Array;
   const colorArray = colors.array as Float32Array;
-  const step = MACRO_TILE_SIZE / (MACRO_GRID_POINTS - 1);
+  const step = MACRO_NEAR_RING.tileSize / (MACRO_NEAR_RING.gridPoints - 1);
   let heightMatches = 0;
   let heightChecks = 0;
-  for (let gz = 0; gz < MACRO_GRID_POINTS; gz++) {
-    for (let gx = 0; gx < MACRO_GRID_POINTS; gx++) {
-      const i = gz * MACRO_GRID_POINTS + gx;
+  for (let gz = 0; gz < MACRO_NEAR_RING.gridPoints; gz++) {
+    for (let gx = 0; gx < MACRO_NEAR_RING.gridPoints; gx++) {
+      const i = gz * MACRO_NEAR_RING.gridPoints + gx;
       const wx = gx * step;
       const wz = gz * step;
       const expected = source.sampleHeight(wx, wz);
@@ -78,12 +98,23 @@ async function main(): Promise<void> {
   }
   check('macro heights match the elevation source', heightMatches === heightChecks, heightMatches + '/' + heightChecks);
   check('macro colors vary over relief (finite RGB)', Number.isFinite(colorArray[0]));
-
-  // 4. Tile span covers the 3 km+ ring in macro tiles.
-  const spanMeters = (MACRO_HALF_TILES * 2 + 1) * MACRO_TILE_SIZE;
-  check('macro shell spans beyond 3 km', spanMeters > 6000, spanMeters + ' m');
-
   geometry.dispose();
+
+  // 3. Voxel-box AABB skip: the tile containing the player is skipped, the
+  //    neighbor just outside it is kept.
+  check(
+    'voxel box contains the player point',
+    intersectsVoxelBox(-VOXEL_SKIP_HALF, VOXEL_SKIP_HALF, -VOXEL_SKIP_HALF, VOXEL_SKIP_HALF, 0, 0),
+  );
+  check(
+    'tiles far from the voxel box are not skipped',
+    !intersectsVoxelBox(1024, 2048, 1024, 2048, 0, 0),
+  );
+
+  // 4. Ring spans: near 256 m ring nests inside the far ring, far reaches 3 km+.
+  check('near ring reaches past the voxel box', MACRO_NEAR_RING.outerRadius > VOXEL_SKIP_HALF * 2);
+  check('far ring outer bound exceeds 3 km', MACRO_FAR_RING.outerRadius > 3000, MACRO_FAR_RING.outerRadius + ' m');
+  check('far ring starts inside the near ring outer bound', MACRO_FAR_RING.innerRadius < MACRO_NEAR_RING.outerRadius);
 
   if (failures > 0) {
     throw new Error(failures + ' test(s) failed');

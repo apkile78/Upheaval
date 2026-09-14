@@ -15,7 +15,13 @@
 import { Material, Mesh, MeshStandardMaterial, Scene } from 'three';
 import type { EarthElevationSource } from '../types/world';
 import { frameAnchor } from './frameAnchor';
-import { buildMacroTileGeometry, MACRO_TILE_SIZE, MACRO_HALF_TILES } from './macroGeometry';
+import {
+  buildMacroTileGeometry,
+  intersectsVoxelBox,
+  MACRO_NEAR_RING,
+  MACRO_FAR_RING,
+  MacroRing,
+} from './macroGeometry';
 
 /** Macro tile material (shared, vertex-colored, distant friendly shading). */
 function createMacroMaterial(): MeshStandardMaterial {
@@ -42,47 +48,16 @@ export class MacroTerrainManager {
   }
 
   /**
-   * Update macro tiles around the player (world meters). nearHalfExtentTiles
-   * is the voxel-chunk radius expressed in macro tiles (skip overlap region).
+   * Update macro tiles around the player (world meters). Tiles overlapping
+   * the near-field voxel box keep their voxel depiction; everything else out
+   * to both ring radii is filled, loading elevation tiles on demand.
    */
-  update(centerWorldX: number, centerWorldZ: number, voxelRadiusMeters: number): void {
-    const centerTx = Math.floor(centerWorldX / MACRO_TILE_SIZE);
-    const centerTz = Math.floor(centerWorldZ / MACRO_TILE_SIZE);
-
+  update(centerWorldX: number, centerWorldZ: number): void {
     const wanted = new Set<string>();
-    for (let dx = -MACRO_HALF_TILES; dx <= MACRO_HALF_TILES; dx++) {
-      for (let dz = -MACRO_HALF_TILES; dz <= MACRO_HALF_TILES; dz++) {
-        const tx = centerTx + dx;
-        const tz = centerTz + dz;
-        const minX = tx * MACRO_TILE_SIZE;
-        const maxX = minX + MACRO_TILE_SIZE;
-        const minZ = tz * MACRO_TILE_SIZE;
-        const maxZ = minZ + MACRO_TILE_SIZE;
-        const tileCenterX = minX + MACRO_TILE_SIZE / 2;
-        const tileCenterZ = minZ + MACRO_TILE_SIZE / 2;
+    this.updateRing(centerWorldX, centerWorldZ, MACRO_NEAR_RING, wanted);
+    this.updateRing(centerWorldX, centerWorldZ, MACRO_FAR_RING, wanted);
 
-        // Skip the near-field area already covered by the voxel chunk meshes.
-        const dist = Math.sqrt(
-          (tileCenterX - centerWorldX) * (tileCenterX - centerWorldX) +
-            (tileCenterZ - centerWorldZ) * (tileCenterZ - centerWorldZ),
-        );
-        if (dist < voxelRadiusMeters + MACRO_TILE_SIZE) continue;
-
-        const key = tx + ',' + tz;
-        wanted.add(key);
-
-        // Build once per anchor offset; geometry is baked anchor-relative.
-        const anchorTag = key + '@' + frameAnchor.x + ',' + frameAnchor.z;
-        if (this.meshes.has(key) && this.builtTags.has(anchorTag)) continue;
-        if (!this.source.isReady(minX, minZ, maxX, maxZ)) {
-          this.source.requestArea(minX, minZ, maxX, maxZ);
-          continue;
-        }
-        this.buildTile(anchorTag, key, tx, tz);
-      }
-    }
-
-    // Dispose tiles that left the neighborhood.
+    // Dispose tiles that left both neighborhoods.
     for (const [key, mesh] of this.meshes) {
       if (!wanted.has(key)) {
         mesh.geometry.dispose();
@@ -95,13 +70,62 @@ export class MacroTerrainManager {
     }
   }
 
-  private buildTile(anchorTag: string, key: string, tx: number, tz: number): void {
+  /**
+   * Update a single LOD ring: tile indices whose tile center lies within the
+   * ring's annulus (in X and Z), skipping tiles intersecting the voxel box.
+   */
+  private updateRing(
+    centerWorldX: number,
+    centerWorldZ: number,
+    ring: MacroRing,
+    wanted: Set<string>,
+  ): void {
+    const { tileSize } = ring;
+    const minTx = Math.floor((centerWorldX - ring.outerRadius) / tileSize);
+    const maxTx = Math.floor((centerWorldX + ring.outerRadius) / tileSize);
+    const minTz = Math.floor((centerWorldZ - ring.outerRadius) / tileSize);
+    const maxTz = Math.floor((centerWorldZ + ring.outerRadius) / tileSize);
+
+    for (let tx = minTx; tx <= maxTx; tx++) {
+      const minX = tx * tileSize;
+      const maxX = minX + tileSize;
+      for (let tz = minTz; tz <= maxTz; tz++) {
+        const minZ = tz * tileSize;
+        const maxZ = minZ + tileSize;
+
+        // Keep the near-field voxel depiction (no double-draw, no pop).
+        if (intersectsVoxelBox(minX, maxX, minZ, maxZ, centerWorldX, centerWorldZ)) continue;
+
+        // Ring bounds use the tile center so rings nest without overlap gaps.
+        const tileCenterX = minX + tileSize / 2;
+        const tileCenterZ = minZ + tileSize / 2;
+        const radiusX = Math.abs(tileCenterX - centerWorldX);
+        const radiusZ = Math.abs(tileCenterZ - centerWorldZ);
+        const inside = Math.max(radiusX, radiusZ);
+        if (inside < ring.innerRadius || inside > ring.outerRadius) continue;
+
+        const key = ring.tileSize + ':' + tx + ',' + tz;
+        wanted.add(key);
+
+        // Build once per anchor offset; geometry is baked anchor-relative.
+        const anchorTag = key + '@' + frameAnchor.x + ',' + frameAnchor.z;
+        if (this.meshes.has(key) && this.builtTags.has(anchorTag)) continue;
+        if (!this.source.isReady(minX, minZ, maxX, maxZ)) {
+          this.source.requestArea(minX, minZ, maxX, maxZ);
+          continue;
+        }
+        this.buildTile(anchorTag, key, tx, tz, ring);
+      }
+    }
+  }
+
+  private buildTile(anchorTag: string, key: string, tx: number, tz: number, ring: MacroRing): void {
     const existing = this.meshes.get(key);
     if (existing !== undefined) {
       existing.geometry.dispose();
       this.scene.remove(existing);
     }
-    const geometry = buildMacroTileGeometry(this.source, tx, tz);
+    const geometry = buildMacroTileGeometry(this.source, tx, tz, ring.tileSize, ring.gridPoints);
     const mesh = new Mesh(geometry, this.material);
     mesh.frustumCulled = true;
     this.meshes.set(key, mesh);

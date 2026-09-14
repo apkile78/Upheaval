@@ -117,12 +117,13 @@ function gameLoopTick(now: number): void {
   // anchor-relative mesh updates below.
   updateFrameAnchor(player.transform.position.x, player.transform.position.z)
 
-  // Update chunk terrain meshes
+  // Update chunk terrain meshes, then re-seat them on the current anchor.
   syncChunkMeshes(chunkManager, chunkRenderer)
+  chunkRenderer.syncAnchor()
 
-  // Update the distant-terrain LOD shell around the player.
-  const voxelRadiusMeters = (VOXEL_RENDER_RADIUS * 2 + 1) * 16;
-  macroTerrain.update(player.transform.position.x, player.transform.position.z, voxelRadiusMeters / 2)
+  // Update the distant-terrain LOD shell around the player (fills everything
+  // outside the voxel box out to ~3.6 km).
+  macroTerrain.update(player.transform.position.x, player.transform.position.z)
 
   // Update target tile via raycast
   updateTargetTile(player, chunkManager, selectionBox)
@@ -154,6 +155,10 @@ async function init(): Promise<void> {
 
   // 3. Player state
   player = createInitialPlayer()
+
+  // The frame anchor starts at spawn so the initial meshes below already sit
+  // in correct render-space coordinates.
+  updateFrameAnchor(player.transform.position.x, player.transform.position.z)
 
   // 4. Snap player to terrain surface at start
   snapPlayerToGround(player, chunkManager, FIXED_DT_MS / 1000)

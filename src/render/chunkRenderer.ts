@@ -58,6 +58,17 @@ export class ChunkRenderer {
     this.meshedNeighborCounts.set(key, countNeighbors(neighbors));
   }
 
+  /**
+   * Re-anchor every cached mesh to the current frame anchor. Geometry vertices
+   * carry absolute world heights, so only the mesh origin needs re-seating on
+   * a re-base (no rebuild). Call each frame after updateFrameAnchor.
+   */
+  syncAnchor(): void {
+    for (const mesh of this.meshes.values()) {
+      mesh.position.set(-frameAnchor.x, 0, -frameAnchor.z);
+    }
+  }
+
   removeChunkMesh(key: string): void {
     const mesh = this.meshes.get(key);
     if (mesh) {
