@@ -64,8 +64,10 @@ export interface WorldChunk {
 
 /**
  * Real-Earth elevation source contract (1 game unit = 1 meter, sea level = 0).
- * Backed by tiled NOAA ETOPO 2022 data; tiles load asynchronously and are
- * cached in an LRU. All coordinates are world units (equirectangular meters).
+ * Backed by ETOPO 2022 base data plus finer LOD layers where available:
+ * dense 90 m land tiles are preferred close to the player, GLOBE 30-arcsec
+ * covers land outside the dense set, and the global base supplies ocean, ice
+ * caps, and any remaining gaps. All coordinates are world units.
  */
 export interface EarthElevationSource {
   /** Surface elevation in meters (bilinear; negative = below sea level). */
