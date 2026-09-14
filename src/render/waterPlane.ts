@@ -7,6 +7,7 @@
  */
 
 import { Mesh, MeshStandardMaterial, PlaneGeometry, Scene } from 'three';
+import { frameAnchor } from './frameAnchor';
 
 /** Plane extent (meters): sized for the current ~5 km camera far plane. */
 const PLANE_SIZE = 12000;
@@ -45,7 +46,8 @@ export class WaterPlane {
   update(playerX: number, playerZ: number, visible: boolean): void {
     const x = Math.round(playerX / FOLLOW_SNAP_METERS) * FOLLOW_SNAP_METERS;
     const z = Math.round(playerZ / FOLLOW_SNAP_METERS) * FOLLOW_SNAP_METERS;
-    this.mesh.position.set(x, 0, z);
+    // Anchor-relative so the plane rides the same render-space origin as the terrain.
+    this.mesh.position.set(x - frameAnchor.x, 0, z - frameAnchor.z);
     this.mesh.visible = visible;
   }
 

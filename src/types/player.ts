@@ -10,8 +10,7 @@ import type { Vector3D } from './world';
  */
 export type CameraViewMode =
   | 'first-person'
-  | 'third-person'
-  | 'isometric';
+  | 'third-person';
 
 /**
  * A single item instance in the player inventory.

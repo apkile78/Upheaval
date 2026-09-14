@@ -8,9 +8,10 @@
  * Reads chunk data from simulation, renders to scene.
  */
 
-import { Mesh, MeshStandardMaterial, Scene } from 'three';
+import { Mesh, Fog, MeshStandardMaterial, Scene } from 'three';
 import type { WorldChunk, ChunkCoordinate } from '../types/world';
 import { NeighborHeightmaps, buildChunkGeometry } from './chunkGeometry';
+import { frameAnchor } from './frameAnchor';
 
 // ---------------------------------------------------------------------------
 // Chunk Renderer
@@ -31,6 +32,9 @@ function countNeighbors(n?: NeighborHeightmaps): number {
   return count;
 }
 
+/** Fog fade distance in meters (matches the sky background; hides LOD transitions). */
+export const TERRAIN_FOG_FAR = 7500;
+
 export class ChunkRenderer {
   private scene: Scene;
   private meshes = new Map<string, Mesh>();
@@ -39,12 +43,16 @@ export class ChunkRenderer {
 
   constructor(scene: Scene) {
     this.scene = scene;
+    if (scene.fog === null) {
+      scene.fog = new Fog(0x1a1a2e, 1500, TERRAIN_FOG_FAR);
+    }
   }
 
   updateChunkMesh(chunk: WorldChunk, heightmap: Float32Array, neighbors?: NeighborHeightmaps): void {
     const key = this.chunkKey(chunk.coordinate);
     this.removeChunkMesh(key);
     const mesh = this.createChunkMesh(chunk, heightmap, neighbors);
+    mesh.position.set(-frameAnchor.x, 0, -frameAnchor.z);
     this.meshes.set(key, mesh);
     this.scene.add(mesh);
     this.meshedNeighborCounts.set(key, countNeighbors(neighbors));

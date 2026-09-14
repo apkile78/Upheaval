@@ -7,7 +7,7 @@ Welcome to the Technical Documentation for the 3D CDDA-inspired Survival Simulat
 
 ## Key Goals
 - **Framework & Runtime**: WebGL2 / WebGPU-ready TypeScript architecture, deployable on **GitHub Pages**.
-- **Camera Parity**: Triple-Perspective (1st Person, 3rd Person, Top-Down/Isometric) with dynamic field-of-view and line-of-sight cutaway rendering.
+- **Camera Parity**: First-Person and Third-Person perspectives (1/2 keys) with dynamic field-of-view and line-of-sight cutaway rendering.
 - **World Generation**: 1:1 real-Earth terrain from NOAA ETOPO 2022 elevation data (1 game unit = 1 meter); roads, cities and rivers are follow-up work.
 - **Simulation Depth**: Granular body part degradation, layered clothing thermal dynamics, dynamic sound/scent vector propagation, and modular vehicle frame assembly.
 

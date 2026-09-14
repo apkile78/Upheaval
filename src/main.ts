@@ -18,7 +18,9 @@ import { snapPlayerToGround } from './sim/terrainFollow'
 import { createEarthElevationSource, warmupAround } from './sim/world/earth/elevationLoader'
 import { EARTH_SPAWN, EARTH_SPAWN_LAT, EARTH_SPAWN_LON } from './sim/world/earth/earthConfig'
 import { WaterPlane } from './render/waterPlane'
+import { MacroTerrainManager } from './render/macroTerrain'
 import { buildInitialChunkMeshes, chunkCoordAt, syncChunkMeshes } from './render/terrainView'
+import { updateFrameAnchor } from './render/frameAnchor'
 import type { Entity } from './types/ecs'
 import type { PlayerState } from './types/player'
 import { initRender, renderFrame, scene } from './render/canvas'
@@ -50,6 +52,9 @@ let entityRenderer!: EntityRenderer
 /** Chunk Renderer for terrain meshes. */
 let chunkRenderer!: ChunkRenderer
 
+/** Macro terrain manager for the distance LOD shell. */
+let macroTerrain!: MacroTerrainManager
+
 /** Sea-level water plane (oceans over real bathymetry). */
 let waterPlane!: WaterPlane
 
@@ -65,8 +70,11 @@ let hudManager!: HUDManager
 
 function updateChunks(): void {
   const pos = player.transform.position
-  chunkManager.updateActiveChunks(chunkCoordAt(pos.x, pos.y, pos.z), 4)
+  chunkManager.updateActiveChunks(chunkCoordAt(pos.x, pos.y, pos.z), VOXEL_RENDER_RADIUS)
 }
+
+/** Sim-chunk render radius (voxel layers stay close; the macro shell covers distance). */
+const VOXEL_RENDER_RADIUS = 6
 
 // ---------------------------------------------------------------------------
 // Target tile raycasting (updated every render frame)
@@ -105,8 +113,16 @@ function gameLoopTick(now: number): void {
   // Sync HUD health display
   hudManager.updateHealth(player.health, player.maxHealth)
 
+  // Rebase the shared render-space frame anchor to the player before any
+  // anchor-relative mesh updates below.
+  updateFrameAnchor(player.transform.position.x, player.transform.position.z)
+
   // Update chunk terrain meshes
   syncChunkMeshes(chunkManager, chunkRenderer)
+
+  // Update the distant-terrain LOD shell around the player.
+  const voxelRadiusMeters = (VOXEL_RENDER_RADIUS * 2 + 1) * 16;
+  macroTerrain.update(player.transform.position.x, player.transform.position.z, voxelRadiusMeters / 2)
 
   // Update target tile via raycast
   updateTargetTile(player, chunkManager, selectionBox)
@@ -179,6 +195,9 @@ async function init(): Promise<void> {
   // 11. Chunk Renderer - create terrain meshes for the starter chunks
   chunkRenderer = new ChunkRenderer(scene)
   buildInitialChunkMeshes(chunkManager, chunkRenderer)
+
+  // 11b. Distant-terrain LOD shell (anchor-relative macro tiles out to ~3.5 km)
+  macroTerrain = new MacroTerrainManager(scene, earthSource)
 
   // 11b. Sea-level water plane
   waterPlane = new WaterPlane(scene)

@@ -37,8 +37,8 @@ export function initInput(): void {
 function handleKeyDown(e: KeyboardEvent): void {
   keys.add(e.key.toLowerCase());
 
-  // Camera view switching: 1 = first-person, 2 = third-person, 3 = isometric
-  if (e.key === '1' || e.key === '2' || e.key === '3') {
+  // Camera view switching: 1 = first-person, 2 = third-person
+  if (e.key === '1' || e.key === '2') {
     e.preventDefault();
   }
 

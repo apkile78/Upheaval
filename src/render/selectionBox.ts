@@ -6,6 +6,7 @@
  */
 
 import { BoxGeometry, LineBasicMaterial, LineSegments, EdgesGeometry } from 'three';
+import { frameAnchor } from './frameAnchor';
 
 /** Wireframe color for the targeted tile outline. */
 const HIGHLIGHT_COLOR = 0x00ff88;
@@ -43,11 +44,11 @@ export class SelectionBox {
 
   /** Update the box position and size to match a target tile. */
   updatePosition(tileX: number, tileY: number, tileZ: number): void {
-    // Tile center in world space
+    // Tile center in world space, minus the shared render-space anchor.
     this.mesh.position.set(
-      tileX + 0.5,
+      tileX + 0.5 - frameAnchor.x,
       tileY + 0.5,
-      tileZ + 0.5,
+      tileZ + 0.5 - frameAnchor.z,
     );
     this.mesh.visible = true;
   }
@@ -57,7 +58,7 @@ export class SelectionBox {
    * @param worldPos World-space position of the tile center.
    */
   updateFromWorldPos(worldPos: { x: number; y: number; z: number }): void {
-    this.mesh.position.set(worldPos.x, worldPos.y, worldPos.z);
+    this.mesh.position.set(worldPos.x - frameAnchor.x, worldPos.y, worldPos.z - frameAnchor.z);
     this.mesh.visible = true;
   }
 

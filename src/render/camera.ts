@@ -1,26 +1,29 @@
 /**
- * Camera controller providing triple-perspective support.
- * Supports first-person, third-person, and isometric views
+ * Camera controller providing first-person and third-person views,
  * driven by simulation player state.
+ *
+ * Positions are resolved through the shared render-space frame anchor so
+ * far-from-origin world coordinates keep float32 precision. Lights and the
+ * camera all operate in anchor-relative render space.
  *
  * Architecture: lives in /src/render/; imports only from /src/types/.
  */
 
 import {
   PerspectiveCamera,
-  OrthographicCamera,
 } from 'three';
 
 import type { CameraViewMode, PlayerState } from '../types/player';
 import type { Vector3D } from '../types/world';
+import { frameAnchor } from './frameAnchor';
 
 /** Conversion factor: sim units to Three.js world units. */
-const SCALE = 1;
+export const SCALE = 1;
 
 /**
- * Triple-perspective camera controller.
- * Maintains up to three camera instances and switches between them
- * based on the active CameraViewMode.
+ * Two-perspective camera controller.
+ * Maintains the shared projection camera with first- and third-person
+ * placement, switched by the active CameraViewMode.
  */
 export class CameraController {
   private readonly canvas: HTMLCanvasElement;
@@ -28,11 +31,8 @@ export class CameraController {
   /** Active perspective camera (first-person & third-person). */
   private perspectiveCamera: PerspectiveCamera;
 
-  /** Orthographic camera for isometric view. */
-  private orthographicCamera: OrthographicCamera;
-
   /** Currently active camera exposed for external render calls. */
-  public camera: PerspectiveCamera | OrthographicCamera;
+  public camera: PerspectiveCamera;
 
   /** Currently active view mode, or null before first setMode call. */
   public currentMode: CameraViewMode | null = null;
@@ -45,20 +45,9 @@ export class CameraController {
       75, // field of view
       aspect,
       0.1, // near
-      5000, // far
+      8000, // far (covers the 3 km+ LOD shell + fog fade)
     );
-    this.perspectiveCamera.position.set(0, 1.7, 0); // eye height
-
-    this.orthographicCamera = new OrthographicCamera(
-      -aspect * 5,
-      aspect * 5,
-      5,
-      -5,
-      0.1,
-      5000,
-    );
-    this.orthographicCamera.position.set(12, 12, 12);
-    this.orthographicCamera.lookAt(0, 0, 0);
+    this.perspectiveCamera.position.set(0 - frameAnchor.x, 1.7, 0 - frameAnchor.z); // eye height
 
     this.camera = this.perspectiveCamera;
   }
@@ -66,15 +55,10 @@ export class CameraController {
   /** Switch to the given view mode and reconfigure the active camera. */
   setMode(mode: CameraViewMode): void {
     this.currentMode = mode;
+    this.camera = this.perspectiveCamera;
 
-    if (mode === 'isometric') {
-      this.camera = this.orthographicCamera;
-      this.syncOrthoAspect();
-    } else {
-      this.camera = this.perspectiveCamera;
-      this.perspectiveCamera.aspect = this.canvas.clientWidth / this.canvas.clientHeight;
-      this.perspectiveCamera.updateProjectionMatrix();
-    }
+    this.perspectiveCamera.aspect = this.canvas.clientWidth / this.canvas.clientHeight;
+    this.perspectiveCamera.updateProjectionMatrix();
   }
 
   /**
@@ -94,15 +78,12 @@ export class CameraController {
       case 'third-person':
         this.updateThirdPerson(pos, rot);
         break;
-      case 'isometric':
-        this.updateIsometric(pos);
-        break;
     }
   }
 
   private updateFirstPerson(pos: Vector3D, rot: Vector3D): void {
     const cam = this.perspectiveCamera;
-    cam.position.set(pos.x * SCALE, pos.y * SCALE + 0.7, pos.z * SCALE);
+    cam.position.set(pos.x * SCALE - frameAnchor.x, pos.y * SCALE + 0.7, pos.z * SCALE - frameAnchor.z);
 
     // Rotate camera to match player heading (yaw) and look-down (pitch)
     cam.rotation.set(0, 0, 0);
@@ -121,36 +102,11 @@ export class CameraController {
     const offsetZ = Math.cos(yawRad) * behind;
 
     cam.position.set(
-      pos.x * SCALE + offsetX,
+      pos.x * SCALE + offsetX - frameAnchor.x,
       pos.y * SCALE + height,
-      pos.z * SCALE + offsetZ,
+      pos.z * SCALE + offsetZ - frameAnchor.z,
     );
 
-    cam.lookAt(pos.x * SCALE, pos.y * SCALE, pos.z * SCALE);
-  }
-
-  private updateIsometric(pos: Vector3D): void {
-    const cam = this.orthographicCamera;
-    const dist = 12;
-
-    cam.position.set(
-      pos.x * SCALE + dist,
-      pos.y * SCALE + dist,
-      pos.z * SCALE + dist,
-    );
-    cam.lookAt(pos.x * SCALE, pos.y * SCALE + 1, pos.z * SCALE);
-    this.syncOrthoAspect();
-  }
-
-  private syncOrthoAspect(): void {
-    const aspect = this.canvas.clientWidth / this.canvas.clientHeight;
-    const halfHeight = 5;
-    const halfWidth = aspect * halfHeight;
-
-    this.orthographicCamera.left = -halfWidth;
-    this.orthographicCamera.right = halfWidth;
-    this.orthographicCamera.top = halfHeight;
-    this.orthographicCamera.bottom = -halfHeight;
-    this.orthographicCamera.updateProjectionMatrix();
+    cam.lookAt(pos.x * SCALE - frameAnchor.x, pos.y * SCALE, pos.z * SCALE - frameAnchor.z);
   }
 }

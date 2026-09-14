@@ -17,10 +17,9 @@ interface CameraModeSink {
 const KEY_MODES: Record<string, CameraViewMode> = {
   '1': 'first-person',
   '2': 'third-person',
-  '3': 'isometric',
 };
 
-/** Bind 1/2/3 to camera modes, keeping PlayerState.cameraMode in sync. */
+/** Bind 1/2 to camera modes, keeping PlayerState.cameraMode in sync. */
 export function initCameraSwitching(camera: CameraModeSink, player: PlayerState): void {
   window.addEventListener('keydown', (e: KeyboardEvent): void => {
     const mode = KEY_MODES[e.key];

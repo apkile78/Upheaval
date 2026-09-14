@@ -36,7 +36,7 @@ export function createInitialPlayer(): PlayerState {
       position: { x: EARTH_SPAWN.x, y: 0, z: EARTH_SPAWN.z },
       rotation: { x: 0, y: 0, z: 0 },
     },
-    cameraMode: 'isometric',
+    cameraMode: 'third-person',
   };
 }
 
