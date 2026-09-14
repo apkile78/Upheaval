@@ -150,7 +150,6 @@ async function init(): Promise<void> {
 
   // 7. Initialize input handling
   initInput()
-  initCameraSwitching(cameraController, player)
 
   // 8. Initialize HUD and register event handlers
   hudManager = new HUDManager()
@@ -170,6 +169,9 @@ async function init(): Promise<void> {
   if (app === null) throw new Error('No #app element found in DOM')
   cameraController = initRender(app)
   cameraController.setMode(player.cameraMode)
+  // Camera key bindings need the controller instance to exist, so bind after
+  // initRender assigns it.
+  initCameraSwitching(cameraController, player)
 
   // 10. Entity Renderer (uses Simulation's EntityManager)
   entityRenderer = new EntityRenderer(simulation.entityManager, scene)
