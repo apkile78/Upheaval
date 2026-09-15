@@ -5,9 +5,10 @@
  * Plain TypeScript, no test-runner dependency. Run via scripts/run-tests.mjs.
  */
 
+import { buildMacroTileGeometry } from '../src/render/macroTileBuilder';
 import {
-  buildMacroTileGeometry,
   intersectsVoxelBox,
+  macroBuildTag,
   MACRO_NEAR_RING,
   MACRO_FAR_RING,
   VOXEL_SKIP_HALF,
@@ -130,6 +131,49 @@ async function main(): Promise<void> {
   check('near ring reaches past the voxel box', MACRO_NEAR_RING.outerRadius > VOXEL_SKIP_HALF * 2);
   check('far ring outer bound exceeds 3 km', MACRO_FAR_RING.outerRadius > 3000, MACRO_FAR_RING.outerRadius + ' m');
   check('far ring starts at the near ring ownership boundary', MACRO_FAR_RING.innerRadius === MACRO_NEAR_RING.outerRadius);
+
+  // 5. Re-base policy: the clipped near ring is re-baked per anchor, while the
+  //    far shell keeps its geometry and is only re-seated (docs/08).
+  const nearTagA = macroBuildTag(MACRO_NEAR_RING, 'k', 0, 0);
+  const nearTagB = macroBuildTag(MACRO_NEAR_RING, 'k', 128, -128);
+  check('near-ring tiles are invalidated by an anchor re-base', nearTagA !== nearTagB);
+  const farTagA = macroBuildTag(MACRO_FAR_RING, 'k', 0, 0);
+  const farTagB = macroBuildTag(MACRO_FAR_RING, 'k', 128, -128);
+  check('far-ring tiles are not invalidated by an anchor re-base', farTagA === farTagB, farTagA);
+  check('far-ring tag is the tile key', farTagA === 'k');
+  check('near ring is marked as rebaking', MACRO_NEAR_RING.rebakeOnRebase === true);
+  check('far ring is marked as bake-once', MACRO_FAR_RING.rebakeOnRebase === false);
+
+  // 6. Coverage partition: at any player position, every macro cell must be owned
+  //    by exactly one ring (no gap, no double-drawn surface). This is what lets
+  //    the unclipped far ring be baked once and translated, and it is the seam
+  //    the near/far clip design exists to protect.
+  const cellSize = MACRO_FAR_RING.tileSize;
+  check('both rings share one cell grid', MACRO_NEAR_RING.tileSize === cellSize);
+  check('far ring owns cells by exclusion', MACRO_FAR_RING.exclusiveInner === true);
+  let partitionHolds = true;
+  let partitionDetail = '';
+  for (const phase of [0, 37, 64, 128, 191, 255]) {
+    const centerX = 4096 + phase;
+    const centerZ = 4096 + phase;
+    const minTile = Math.floor((centerX - MACRO_FAR_RING.outerRadius) / cellSize);
+    const maxTile = Math.floor((centerX + MACRO_FAR_RING.outerRadius) / cellSize);
+    for (let tx = minTile; tx <= maxTile; tx++) {
+      for (let tz = minTile; tz <= maxTile; tz++) {
+        const minX = tx * cellSize;
+        const maxX = minX + cellSize;
+        const minZ = tz * cellSize;
+        const maxZ = minZ + cellSize;
+        const near = tileOverlapsRing(minX, maxX, minZ, maxZ, centerX, centerZ, MACRO_NEAR_RING);
+        const far = tileOverlapsRing(minX, maxX, minZ, maxZ, centerX, centerZ, MACRO_FAR_RING);
+        if (near === far) {
+          partitionHolds = false;
+          partitionDetail = 'phase ' + phase + ' cell ' + tx + ',' + tz + ' near ' + near + ' far ' + far;
+        }
+      }
+    }
+  }
+  check('near/far cell ownership partitions the shell', partitionHolds, partitionDetail);
 
   if (failures > 0) {
     throw new Error(failures + ' test(s) failed');

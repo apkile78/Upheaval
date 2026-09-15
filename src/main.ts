@@ -32,8 +32,11 @@ import { HUDManager } from './render/ui/hudManager'
 
 /** Simulation timestep (60 Hz) in milliseconds. */
 const FIXED_DT_MS = 1000 / 60
-/** Active chunk radius for the world render window. */
-const CHUNK_RENDER_RADIUS = 5
+/**
+ * Simulation chunk radius around the player. Voxel/gameplay chunks stay close
+ * (collision, AI, interactions); the macro LOD shell covers the distance.
+ */
+const CHUNK_RENDER_RADIUS = 6
 
 /** Singleton simulation manager. */
 let chunkManager!: ChunkManager
@@ -71,15 +74,8 @@ let hudManager!: HUDManager
 
 function updateChunks(): void {
   const pos = player.transform.position
-  chunkManager.updateActiveChunks(chunkCoordAt(pos.x, pos.y, pos.z), VOXEL_RENDER_RADIUS)
+  chunkManager.updateActiveChunks(chunkCoordAt(pos.x, pos.y, pos.z), CHUNK_RENDER_RADIUS)
 }
-
-/** Sim-chunk render radius (voxel layers stay close; the macro shell covers distance). */
-const VOXEL_RENDER_RADIUS = 6
-
-// ---------------------------------------------------------------------------
-// Target tile raycasting (updated every render frame)
-// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // Game loop
@@ -104,7 +100,7 @@ function gameLoopTick(now: number): void {
     updatePlayerMovement(player, FIXED_DT_MS / 1000)
     if (consumeTerrainTeleportPending()) {
       chunkManager.clearActiveChunks()
-      chunkManager.updateActiveChunks(chunkCoordAt(player.transform.position.x, 0, player.transform.position.z), VOXEL_RENDER_RADIUS)
+      chunkManager.updateActiveChunks(chunkCoordAt(player.transform.position.x, 0, player.transform.position.z), CHUNK_RENDER_RADIUS)
     } else {
       snapPlayerToGround(player, chunkManager, FIXED_DT_MS / 1000)
     }
@@ -127,14 +123,12 @@ function gameLoopTick(now: number): void {
     player.transform.position.z,
     player.transform.position.y - 0.9,
   )
-  if (frameChanged || localFrameChanged) {
-    chunkRenderer.clear()
-    buildInitialChunkMeshes(chunkManager, chunkRenderer)
-  }
 
-  // Update chunk terrain meshes, then re-seat them on the current anchor.
+  // Update chunk terrain meshes (content diff), then re-seat cached meshes on
+  // the new render origin. A re-base must never re-bake geometry: that was the
+  // per-64 m hitch. See docs/08.
   syncChunkMeshes(chunkManager, chunkRenderer)
-  chunkRenderer.syncAnchor()
+  if (frameChanged || localFrameChanged) chunkRenderer.syncAnchor()
 
   // Update the distant-terrain LOD shell around the player (fills everything
   // outside the voxel box out to ~3.6 km).
@@ -226,7 +220,7 @@ async function init(): Promise<void> {
   // 11b. Distant-terrain LOD shell (anchor-relative macro tiles out to ~3.5 km)
   macroTerrain = new MacroTerrainManager(scene, earthSource)
 
-  // 11b. Sea-level water plane
+  // 11c. Sea-level water plane
   waterPlane = new WaterPlane(scene)
 
   // Add selection box to scene

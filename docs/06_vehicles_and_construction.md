@@ -1,5 +1,8 @@
 # 06. Vehicles, Base Building, & Physics
 
+> **Status: design intent.** Nothing in this module is implemented yet: no
+> vehicle, construction, or debris system exists in `src/sim/` today.
+
 ## Modular Vehicle Frames
 - Built on interconnected structural frame grids.
 - Individual components (engines, battery banks, solar arrays, seating, armor plates, tires) exist as detachable sub-meshes with distinct weight, health, and functionality.

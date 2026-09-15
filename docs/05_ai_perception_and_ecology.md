@@ -1,5 +1,8 @@
 # 05. AI, Perception, & Horde Mechanics
 
+> **Status: design intent.** Nothing in this module is implemented yet: there is
+> no AI, perception, horde, or faction system in `src/sim/` today.
+
 ## Multi-Vector Sensory Propagation
 - **Sound Propagation**: Expanding noise spheres calculate acoustic dampening when traveling through physical walls, doors, or open terrain.
 - **Scent Vectors**: Scent nodes drift downwind based on dynamic weather vectors, letting scent-tracking threats pursue over distances.

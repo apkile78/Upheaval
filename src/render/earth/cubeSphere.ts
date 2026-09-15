@@ -61,9 +61,13 @@ export function geodeticToCubeSphere(
       ? { face: '+y', u: direction.x / ay, v: direction.z / ay }
       : { face: '-y', u: -direction.x / ay, v: direction.z / ay };
   }
+  // Canonical face parameterization (see faceUvToCube): negative faces flip u,
+  // so '-z' is (-u, v, -1) and its inverse must negate x as well. Without the
+  // negation the '-z' face is not self-inverse and southern/antimeridian-adjacent
+  // coordinates round trip to the wrong longitude.
   return direction.z >= 0
     ? { face: '+z', u: direction.x / az, v: direction.y / az }
-    : { face: '-z', u: direction.x / az, v: direction.y / az };
+    : { face: '-z', u: -direction.x / az, v: direction.y / az };
 }
 
 export function cubeSphereTileId(face: CubeFace, level: number, x: number, y: number): string {

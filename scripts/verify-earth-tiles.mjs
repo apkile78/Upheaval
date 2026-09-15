@@ -8,7 +8,7 @@
  * Usage: node scripts/verify-earth-tiles.mjs
  */
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { readPngRgb } from './dem/pngio.mjs';
 
@@ -90,6 +90,57 @@ if (meta.maxElev < 8000 || meta.maxElev > 9500) {
   console.error('FAIL global maximum elevation outside plausible Earth range');
   failures++;
 }
+
+// ---------------------------------------------------------------------------
+// Asset set <-> compiled constants cross-check
+//
+// The runtime reads these assets through constants compiled into
+// src/sim/world/earth/earthConfig.ts. If the two drift, tiles decode to the
+// wrong elevations (or tile indexing breaks) with no type error and no browser
+// error. Values are read from the TypeScript source text so this script stays
+// dependency-free.
+// ---------------------------------------------------------------------------
+
+function readNumberConstant(source, name) {
+  const match = source.match(new RegExp(`export const ${name}\\s*=\\s*(-?[0-9_]+)`));
+  if (match === null) throw new Error(`earthConfig constant not found: ${name}`);
+  return Number(match[1].replace(/_/g, ''));
+}
+
+const config = readFileSync(join('src', 'sim', 'world', 'earth', 'earthConfig.ts'), 'utf8');
+const expected = {
+  gridCols: readNumberConstant(config, 'GRID_COLS'),
+  gridRows: readNumberConstant(config, 'GRID_ROWS'),
+  tilePx: readNumberConstant(config, 'TILE_PX'),
+  tilesX: readNumberConstant(config, 'TILES_X'),
+  tilesY: readNumberConstant(config, 'TILES_Y'),
+  elevOffset: readNumberConstant(config, 'ELEV_OFFSET'),
+  cellArcSec: 60,
+};
+
+for (const [key, want] of Object.entries(expected)) {
+  const got = meta[key];
+  const pass = got === want;
+  if (!pass) failures++;
+  console.log(`${pass ? 'PASS' : 'FAIL'} meta.${key}: ${got} (compiled ${want})`);
+}
+
+let missingTiles = 0;
+for (let row = 0; row < expected.tilesY; row++) {
+  for (let col = 0; col < expected.tilesX; col++) {
+    if (!existsSync(join(OUT, 'tiles', `r${row}_c${col}.png`))) missingTiles++;
+  }
+}
+const tileGridConsistent =
+  meta.gridCols === meta.tilesX * meta.tilePx && meta.gridRows === meta.tilesY * meta.tilePx;
+const arcGridConsistent =
+  meta.gridCols * meta.cellArcSec === 360 * 3600 && meta.gridRows * meta.cellArcSec === 180 * 3600;
+if (missingTiles > 0) failures++;
+if (!tileGridConsistent) failures++;
+if (!arcGridConsistent) failures++;
+console.log(`${missingTiles === 0 ? 'PASS' : 'FAIL'} every expected tile file is present (${expected.tilesX * expected.tilesY})`);
+console.log(`${tileGridConsistent ? 'PASS' : 'FAIL'} tile layout covers the declared grid`);
+console.log(`${arcGridConsistent ? 'PASS' : 'FAIL'} grid matches its declared cell size`);
 
 if (failures > 0) {
   console.error(`\n${failures} verification failure(s)`);

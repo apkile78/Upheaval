@@ -1,5 +1,5 @@
 /**
- * Camera mode switching - keyboard bindings (1/2/3) for the triple-perspective
+ * Camera mode switching - keyboard bindings (1/2) for the two-perspective
  * camera system. Keeps main.ts focused on wiring the simulation and render
  * subsystems together.
  *

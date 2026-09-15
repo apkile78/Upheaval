@@ -1,5 +1,9 @@
 # 04. Survival, Body, & Material Simulation
 
+> **Status: design intent.** Nothing in this module is implemented yet. No body
+> part, gear, thermal, or crafting system exists in `src/sim/` today; the player
+> state carries health/body-part fields only (`src/types/player.ts`).
+
 ## Skeletal Rigging & Localized Damage Overrides
 - Built around a standard **60+ Bone Humanoid Rig** (glTF/glBLAS compliant).
 - Localized health pools (Head, Torso, Left/Right Arm, Left/Right Leg) directly apply bone-weight transform overrides:

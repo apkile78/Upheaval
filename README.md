@@ -19,5 +19,6 @@ Welcome to the Technical Documentation for the 3D CDDA-inspired Survival Simulat
 5. [`05_ai_perception_and_ecology.md`](./docs/05_ai_perception_and_ecology.md) - Sound/Scent Propagation, Hordes, & Factions
 6. [`06_vehicles_and_construction.md`](./docs/06_vehicles_and_construction.md) - Modular Frame Vehicles, Micro-Grid Building, & Debris Physics
 7. [`07_spherical_earth_and_high_res_plan.md`](./docs/07_spherical_earth_and_high_res_plan.md) - Spherical Earth, View Distance, LOD Coverage, & High-Resolution Terrain Plan
+8. [`08_earth_coordinates_and_render_origin.md`](./docs/08_earth_coordinates_and_render_origin.md) - Sim/Render Scale Contract, Cube-Sphere Face Convention, & Floating-Origin Re-Base Rules
 
 Implementation checklist: [`todo.md`](./todo.md)

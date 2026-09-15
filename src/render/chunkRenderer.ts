@@ -11,7 +11,7 @@
 import { Mesh, Fog, MeshStandardMaterial, Scene } from 'three';
 import type { WorldChunk, ChunkCoordinate } from '../types/world';
 import { NeighborHeightmaps, buildChunkGeometry } from './chunkGeometry';
-import { frameAnchor } from './frameAnchor';
+import { applyMeshBase, captureMeshBase, type MeshBase } from './meshBase';
 
 // ---------------------------------------------------------------------------
 // Chunk Renderer
@@ -38,7 +38,7 @@ export const TERRAIN_FOG_FAR = 20000;
 export class ChunkRenderer {
   private scene: Scene;
   private meshes = new Map<string, Mesh>();
-  private meshAnchors = new Map<string, { x: number; z: number }>();
+  private meshBases = new Map<string, MeshBase>();
   /** Neighbor count present when each mesh was last built (diff tracking). */
   private meshedNeighborCounts = new Map<string, number>();
 
@@ -55,20 +55,24 @@ export class ChunkRenderer {
     const mesh = this.createChunkMesh(chunk, heightmap, neighbors);
     mesh.position.set(0, 0, 0);
     this.meshes.set(key, mesh);
-    this.meshAnchors.set(key, { x: frameAnchor.x, z: frameAnchor.z });
+    this.meshBases.set(key, captureMeshBase());
     this.scene.add(mesh);
     this.meshedNeighborCounts.set(key, countNeighbors(neighbors));
   }
 
   /**
-   * Re-anchor every cached mesh to the current frame anchor. Geometry vertices
-  * carry coordinates relative to the build anchor, so only the mesh origin
-  * needs re-seating on a re-base. Call each frame after updateFrameAnchor.
+   * Re-seat every cached mesh onto the current render origin. Geometry is baked
+   * once per content change and only translated afterwards, so a re-base costs
+   * one position write per mesh instead of a full re-mesh. Returns how many
+   * meshes actually moved; call it only after the anchor/frame changed.
    */
-  syncAnchor(): void {
-    for (const mesh of this.meshes.values()) {
-      mesh.position.set(0, 0, 0);
+  syncAnchor(): number {
+    let moved = 0;
+    for (const [key, mesh] of this.meshes) {
+      const base = this.meshBases.get(key);
+      if (base !== undefined && applyMeshBase(mesh, base)) moved++;
     }
+    return moved;
   }
 
   removeChunkMesh(key: string): void {
@@ -79,7 +83,7 @@ export class ChunkRenderer {
       this.scene.remove(mesh);
       this.meshes.delete(key);
       this.meshedNeighborCounts.delete(key);
-      this.meshAnchors.delete(key);
+      this.meshBases.delete(key);
     }
   }
 
@@ -102,7 +106,7 @@ export class ChunkRenderer {
         this.scene.remove(mesh);
         this.meshes.delete(key);
         this.meshedNeighborCounts.delete(key);
-        this.meshAnchors.delete(key);
+        this.meshBases.delete(key);
       }
     }
 
@@ -123,7 +127,7 @@ export class ChunkRenderer {
     }
     this.meshes.clear();
     this.meshedNeighborCounts.clear();
-    this.meshAnchors.clear();
+    this.meshBases.clear();
   }
 
   private chunkKey(coord: ChunkCoordinate): string {

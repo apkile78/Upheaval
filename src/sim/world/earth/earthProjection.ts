@@ -8,6 +8,27 @@
 
 import { METERS_PER_DEGREE } from './earthConfig';
 
+const DEG_TO_RAD = Math.PI / 180;
+
+/** Clamp for `metersPerUnitX` (cos 85 deg) at extreme latitudes. */
+export const MIN_EAST_SCALE = 0.0871557;
+
+/**
+ * True ground metres per world unit along the X (east-west) axis.
+ *
+ * The world X axis is an equirectangular longitude axis, so one unit covers
+ * `cos(latitude)` true ground metres. Real east-west movement of `d` metres at
+ * latitude `lat` therefore needs `d / metersPerUnitX(lat)` world units.
+ *
+ * The factor is clamped at `MIN_EAST_SCALE` so polar movement cannot divide by
+ * zero or explode the world-space step (see docs/08 for the sim/render scale
+ * contract).
+ */
+export function metersPerUnitX(lat: number): number {
+  const cosLat = Math.cos(clampLatitude(lat) * DEG_TO_RAD);
+  return Math.max(MIN_EAST_SCALE, cosLat);
+}
+
 export interface LatLon {
   lat: number;
   lon: number;
@@ -27,10 +48,15 @@ export function latLonToWorld(lat: number, lon: number): WorldXZ {
   };
 }
 
+/** Latitude (degrees) at a world Z coordinate. Allocation-free latitude lookup. */
+export function latitudeAt(worldZ: number): number {
+  return 90 - worldZ / METERS_PER_DEGREE;
+}
+
 /** World meters -> latitude/longitude. Longitude wrapped to [-180, 180). */
 export function worldToLatLon(worldX: number, worldZ: number): LatLon {
   return {
-    lat: 90 - worldZ / METERS_PER_DEGREE,
+    lat: latitudeAt(worldZ),
     lon: wrapLongitude(worldX / METERS_PER_DEGREE - 180),
   };
 }

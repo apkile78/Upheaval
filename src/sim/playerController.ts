@@ -9,7 +9,7 @@
  */
 
 import type { PlayerState } from '../types/player';
-import { latLonToWorld } from './world/earth/earthProjection';
+import { latLonToWorld, latitudeAt, metersPerUnitX } from './world/earth/earthProjection';
 import {
   HIGH_ELEVATION_TEST_HEIGHT,
   HIGH_ELEVATION_TEST_LAT,
@@ -114,11 +114,17 @@ export function updatePlayerMovement(
   if (left) { dx += Math.cos(yaw); dz -= Math.sin(yaw); }
   if (right) { dx -= Math.cos(yaw); dz += Math.sin(yaw); }
 
-  // Apply movement directly (terrain following handles surface contact)
+  // Apply movement directly (terrain following handles surface contact).
+  // The direction is unit-length in TRUE ground metres; the sim's X axis is a
+  // longitude axis, so an east-west step needs 1/cos(latitude) more world units
+  // to cover the same real distance. This keeps sim movement and the ENU render
+  // space true-scale with each other (see docs/08).
   const len = Math.sqrt(dx * dx + dz * dz);
   if (len > 0) {
-    player.transform.position.x += (dx / len) * MOVE_SPEED * dt;
-    player.transform.position.z += (dz / len) * MOVE_SPEED * dt;
+    const distance = MOVE_SPEED * dt;
+    const eastUnitsPerMeter = 1 / metersPerUnitX(latitudeAt(player.transform.position.z));
+    player.transform.position.x += (dx / len) * distance * eastUnitsPerMeter;
+    player.transform.position.z += (dz / len) * distance;
   }
 
   // Vertical

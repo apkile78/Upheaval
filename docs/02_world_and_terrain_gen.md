@@ -17,6 +17,10 @@ Scale and projection:
   clamped to ±90°. World extents ≈ 40.07 M × 20.02 M units.
 - The chunk grid (16 units = 16 m) and player scale (1.8 m tall) are unchanged;
   the same ground-follow physics and mesh pipeline are reused.
+- **Sim ↔ render scale contract**: one unit is one true metre along the meridian,
+  while the X axis is a longitude axis covering `cos(latitude)` true metres per
+  unit. Movement and the ENU render space are kept true-scale with each other;
+  see [08](08_earth_coordinates_and_render_origin.md).
 
 ## Data Pipeline (`scripts/`)
 
@@ -85,7 +89,10 @@ The previous procedural world generator — seeded continents/landmask
 carving (`riverGenerator`, `riverCarve`), region archetypes (`regionMap`), the
 ridge/domain-warp noise machinery, plus all of their tests — is preserved under
 `/trash/` (not compiled, not imported). Rivers, region labels, cities, roads,
-and LOD/render-distance work are follow-up tasks.
+and LOD/render-distance work are follow-up tasks, as is a 90 m fine-detail
+elevation layer (the Web Mercator/Terrarium stub is archived in
+`/trash/src_sim_world/earth_fineProjection.ts`; the data plan is docs/07
+phase 5).
 
 ## Files
 | File | Purpose |

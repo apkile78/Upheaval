@@ -43,3 +43,14 @@ export function worldToLocalEnu(
   const { lat, lon } = worldToLatLon(worldX, worldZ);
   return geodeticToEnu({ lat, lon, height: elevation }, frame.origin);
 }
+/**
+ * ENU position of one frame's origin measured inside another frame.
+ *
+ * Geometry baked in `frame` is re-seated onto `current` by translating its mesh
+ * with this vector (Three.js coordinates: east, up, -north). The two frames are
+ * rigidly related up to the ENU basis rotation of one anchor step, so geometry
+ * can be baked once and translated instead of regenerated (see docs/08).
+ */
+export function frameOriginWithin(frame: LocalEarthFrame, current: LocalEarthFrame): EnuVector {
+  return geodeticToEnu(frame.origin, current.origin);
+}
