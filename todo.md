@@ -53,6 +53,17 @@ coordinate system.
 - [ ] Add a repeatable browser/WebGL smoke test for Earth boot.
 - [ ] Verify the boot path: metadata, worker decode, spawn warmup, chunks,
       macro terrain, player grounding, and first rendered frame.
+- [x] Ensure the high-elevation debug teleport requests destination chunks,
+      does not ground against stale fallback data, and hides the water plane
+      until destination elevation is ready.
+- [x] Give macro LOD bands exclusive tile ownership to prevent floating-line
+      artifacts from overlapping near and far surfaces.
+- [x] Require DEM tile-boundary requests to include every crossed source tile.
+- [x] Align near/far macro tile boundaries to avoid T-junctions at the LOD
+      transition.
+- [x] Keep active chunks until the new center chunk is ready during movement.
+- [x] Clip macro boundary triangles instead of dropping whole tiles at the
+      near-field boundary.
 - [ ] Capture baseline screenshots or diagnostic measurements before LOD changes.
 
 Acceptance:
@@ -102,10 +113,10 @@ Target bands:
 20-35 km      scope/extended shell
 ```
 
-- [ ] Define render-only distance profile constants in `src/render/`.
+- [x] Define render-only distance profile constants in `src/render/`.
 - [ ] Keep simulation active chunks at gameplay scale.
-- [ ] Replace center-distance-only tile selection with bounds-based coverage.
-- [ ] Remove the whole-tile near-field skip gap.
+- [x] Replace center-distance-only tile selection with bounds-based coverage.
+- [x] Remove the whole-tile near-field skip gap.
 - [ ] Guarantee coverage around the full near-field boundary.
 - [ ] Establish non-overlapping LOD ownership for each distance band.
 - [ ] Add transition rings between resolutions.
@@ -114,7 +125,7 @@ Target bands:
       height-continuity solution.
 - [ ] Keep parent LOD visible while child tiles are loading.
 - [ ] Dispose only tiles outside the requested visual envelope.
-- [ ] Extend the current shell to at least `8 km` normal terrain.
+- [x] Extend the current shell to at least `8 km` normal terrain.
 - [ ] Add a coarse shell reaching `20 km` before spherical conversion.
 - [ ] Set normal camera/fog limits to match actual available terrain.
 - [ ] Add scope distance constants without expanding simulation or AI range.
@@ -136,33 +147,33 @@ correct Earth geometry while preserving the simulation/render boundary.
 
 ### Geographic Math
 
-- [ ] Add WGS84 constants:
+- [x] Add WGS84 constants:
       `a = 6378137 m`, `1/f = 298.257223563`.
-- [ ] Implement geodetic latitude/longitude/height to ECEF conversion.
-- [ ] Implement ECEF to geodetic conversion.
-- [ ] Implement local ENU basis construction around the player.
-- [ ] Implement ENU/world-to-local and local-to-world transforms.
+- [x] Implement geodetic latitude/longitude/height to ECEF conversion.
+- [x] Implement ECEF to geodetic conversion.
+- [x] Implement local ENU basis construction around the player.
+- [x] Implement ENU/world-to-local and local-to-world transforms.
 - [ ] Handle antimeridian wrapping continuously.
 - [ ] Handle polar behavior without longitude discontinuities.
 - [ ] Define the vertical datum contract for all terrain sources.
 - [ ] Normalize source elevation into the selected datum during preprocessing.
-- [ ] Add round-trip tests for London, Everest, Cape Town, Tokyo, poles, and
+- [x] Add round-trip tests for London, Everest, Cape Town, Tokyo, poles, and
       antimeridian-adjacent points.
-- [ ] Add tests for ENU orientation and local distances.
+- [x] Add tests for ENU orientation and local distances.
 - [ ] Add horizon/curvature tests at `6 km`, `20 km`, and `35 km`.
 
 ### Render Integration
 
 - [ ] Keep geographic terrain contracts in `src/types/` and `src/sim/`.
-- [ ] Convert visible terrain to local ENU render coordinates in `src/render/`.
-- [ ] Keep the floating origin local to the renderer.
+- [x] Convert visible terrain to local ENU render coordinates in `src/render/`.
+- [x] Keep the floating origin local to the renderer.
 - [ ] Ensure elevation is radial relative to the WGS84 surface, not global Y.
 - [ ] Convert the near tangent mesh onto the ellipsoid surface.
 - [ ] Convert far terrain to the same ellipsoid without double curvature.
-- [ ] Keep player grounding consistent with the local near mesh.
+- [x] Keep player grounding consistent with the local near mesh.
 - [ ] Update water rendering to follow the local geodetic sea-level surface.
 - [ ] Remove assumptions that global `Y = 0` is sea level everywhere.
-- [ ] Verify entities and selection/raycast coordinates use the same local frame.
+- [x] Verify entities and selection/raycast coordinates use the same local frame.
 
 Acceptance:
 
@@ -177,11 +188,11 @@ Acceptance:
 Purpose: provide efficient, globally continuous far terrain without
 polar distortion or an equirectangular horizon.
 
-- [ ] Choose cube-sphere face parameterization and tile addressing.
+- [x] Choose cube-sphere face parameterization and tile addressing.
 - [ ] Define quadtree LOD levels and geometric error thresholds.
-- [ ] Define the mapping from geographic samples to cube-sphere tiles.
-- [ ] Keep tile keys stable across runs and dataset releases.
-- [ ] Build parent/child relationships for fallback and streaming.
+- [x] Define the mapping from geographic samples to cube-sphere tiles.
+- [x] Keep tile keys stable across runs and dataset releases.
+- [x] Build parent/child relationships for fallback and streaming.
 - [ ] Generate shared or stitchable tile edges.
 - [ ] Support neighboring tiles at different LOD levels.
 - [ ] Add transition geometry or crack-free edge stitching.
@@ -434,3 +445,16 @@ reconstruct all persistent terrain changes and world objects after render cache
 eviction or restart. Simulation and rendering remain strictly separated, and
 no raw multi-terabyte terrain source is required in Git history or browser
 preload.
+
+## Deferred Investigation: Green Plane at High Elevation
+
+- [ ] Reproduce the remaining green surface at Everest after a clean build.
+- [ ] Identify the exact mesh/material/tile key producing it with a render
+      diagnostic; do not assume it is the water plane.
+- [ ] Compare its source elevation, local ENU coordinates, and triangle bounds
+      against the near and macro terrain meshes.
+- [ ] Check whether it is an engine-level terrain-generation artifact that will
+      disappear when the spherical/cube-sphere terrain replaces the current
+      planar shell.
+- [ ] If it survives the terrain migration, fix it at the owning terrain/data
+      layer rather than masking it with camera or visibility settings.

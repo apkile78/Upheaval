@@ -16,6 +16,7 @@ import { BufferGeometry, Float32BufferAttribute } from 'three';
 import type { WorldChunk } from '../types/world';
 import { BIOME_COLORS } from '../sim/world/biomeManager';
 import { frameAnchor } from './frameAnchor';
+import { currentLocalEarthFrame, worldToLocalEnu } from './earth/localFrame';
 
 const CHUNK_SIZE = 16;
 const TILE_SIZE = 1;
@@ -139,7 +140,12 @@ export function buildChunkGeometry(
 
       // RAW corner height - identical value both chunks compute for shared corners
       const height = sampleCorner(x, z, heightmap, neighbors);
-      positions.push(wx - frameAnchor.x, height, wz - frameAnchor.z);
+      if (currentLocalEarthFrame === null) {
+        positions.push(wx - frameAnchor.x, height, wz - frameAnchor.z);
+      } else {
+        const local = worldToLocalEnu(wx, wz, height, currentLocalEarthFrame);
+        positions.push(local.east, local.up, -local.north);
+      }
 
       // Vertex color: dominant terrain type of the up-to-4 touching tiles
       const tx = Math.max(0, Math.min(CHUNK_SIZE - 1, x === gridW ? x - 1 : x));

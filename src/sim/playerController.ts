@@ -22,6 +22,7 @@ import {
 
 const keys = new Set<string>();
 let controlledPlayer: PlayerState | null = null;
+let terrainTeleportPending = false;
 
 /** Movement speed in world units per second. */
 const MOVE_SPEED = 8;
@@ -67,6 +68,13 @@ export function teleportToHighElevation(player: PlayerState): void {
   player.transform.position.x = destination.x;
   player.transform.position.y = HIGH_ELEVATION_TEST_HEIGHT + 0.9;
   player.transform.position.z = destination.z;
+  terrainTeleportPending = true;
+}
+
+export function consumeTerrainTeleportPending(): boolean {
+  const pending = terrainTeleportPending;
+  terrainTeleportPending = false;
+  return pending;
 }
 
 function handleKeyUp(e: KeyboardEvent): void {

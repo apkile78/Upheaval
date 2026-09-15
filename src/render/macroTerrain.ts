@@ -17,7 +17,7 @@ import type { EarthElevationSource } from '../types/world';
 import { frameAnchor } from './frameAnchor';
 import {
   buildMacroTileGeometry,
-  intersectsVoxelBox,
+  tileOverlapsRing,
   MACRO_NEAR_RING,
   MACRO_FAR_RING,
   MacroRing,
@@ -71,8 +71,8 @@ export class MacroTerrainManager {
   }
 
   /**
-   * Update a single LOD ring: tile indices whose tile center lies within the
-   * ring's annulus (in X and Z), skipping tiles intersecting the voxel box.
+  * Update a single LOD ring: include every tile whose bounds overlap the
+  * ring band so tile size cannot create coverage holes.
    */
   private updateRing(
     centerWorldX: number,
@@ -93,18 +93,9 @@ export class MacroTerrainManager {
         const minZ = tz * tileSize;
         const maxZ = minZ + tileSize;
 
-        // Keep the near-field voxel depiction (no double-draw, no pop).
-        if (intersectsVoxelBox(minX, maxX, minZ, maxZ, centerWorldX, centerWorldZ)) continue;
+        if (!tileOverlapsRing(minX, maxX, minZ, maxZ, centerWorldX, centerWorldZ, ring)) continue;
 
-        // Ring bounds use the tile center so rings nest without overlap gaps.
-        const tileCenterX = minX + tileSize / 2;
-        const tileCenterZ = minZ + tileSize / 2;
-        const radiusX = Math.abs(tileCenterX - centerWorldX);
-        const radiusZ = Math.abs(tileCenterZ - centerWorldZ);
-        const inside = Math.max(radiusX, radiusZ);
-        if (inside < ring.innerRadius || inside > ring.outerRadius) continue;
-
-        const key = ring.tileSize + ':' + tx + ',' + tz;
+        const key = ring.tileSize + ':' + ring.gridPoints + ':' + tx + ',' + tz;
         wanted.add(key);
 
         // Build once per anchor offset; geometry is baked anchor-relative.
@@ -125,7 +116,16 @@ export class MacroTerrainManager {
       existing.geometry.dispose();
       this.scene.remove(existing);
     }
-    const geometry = buildMacroTileGeometry(this.source, tx, tz, ring.tileSize, ring.gridPoints);
+    const geometry = buildMacroTileGeometry(
+      this.source,
+      tx,
+      tz,
+      ring.tileSize,
+      ring.gridPoints,
+      frameAnchor.x,
+      frameAnchor.z,
+      ring.innerRadius,
+    );
     const mesh = new Mesh(geometry, this.material);
     mesh.frustumCulled = true;
     this.meshes.set(key, mesh);

@@ -114,6 +114,12 @@ The replacement must:
 6. Rebuild or rebase render geometry without changing simulation coordinates.
 7. Test radial coverage at arbitrary player positions, not only tile centers.
 
+The first implementation slice now applies the bounds-based selection rule to
+the existing flat macro shell, removes the whole-tile near-field exclusion,
+extends the normal far shell to `8 km`, and aligns the camera/fog envelope to
+the expanded shell. WGS84 conversion, stitched spherical LOD, and persistent
+world changes remain later phases in `todo.md`.
+
 A cube-sphere or quadtree cube-sphere is preferred for the far shell. It avoids
 the polar singularities and extreme longitudinal stretching of an
  equirectangular mesh. The local near field can still use a tangent-plane
@@ -239,6 +245,62 @@ Add pure coordinate utilities for:
 
 Unit-test known anchors, round trips, horizon distances, and continuity across
 tile and cube-face boundaries.
+
+The first WGS84 math slice is implemented in `src/render/earth/wgs84.ts` with
+CPU tests covering ECEF/geodetic round trips and ENU meter conversion.
+
+A render-only adapter now maps the existing simulation `x/z` coordinates and
+elevation samples into a local ENU frame in `src/render/earth/localFrame.ts`.
+Its CPU tests establish the integration contract without changing runtime
+terrain consumers yet.
+
+The adapter is now connected to the runtime render path. Near and macro terrain,
+the camera, entities, water plane, and selection marker share the same snapped
+local ENU frame. Simulation coordinates remain unchanged. Near meshes rebuild
+only when the snapped local origin changes; full cube-sphere far-shell stitching
+remains a later phase.
+
+The cube-sphere foundation is now also defined in
+`src/render/earth/cubeSphere.ts`. It maps six stable faces and UV coordinates
+to the WGS84 ellipsoid, supports inverse face/UV selection, and has CPU tests
+for face centers, edges, poles, antimeridian-adjacent anchors, elevation, and
+stable tile IDs. It is not yet connected to the macro terrain manager; quadtree
+selection, parent fallback, and edge stitching remain required before that
+replacement.
+
+The high-elevation debug teleport now requests destination chunks immediately,
+skips one stale-data grounding step, and keeps the sea-level plane hidden until
+the destination height is resident. This prevents an unloaded-area fallback
+from presenting a false green/sea-level plane at Everest or pulling the player
+down during the transition.
+
+The cube-sphere quadtree addressing foundation is now implemented in
+`src/render/earth/cubeSphereQuadtree.ts`. It provides stable face/level/x/y
+tile IDs, UV bounds, UV lookup, and parent/child relationships with CPU tests.
+Camera-error selection, parent fallback behavior, and runtime far-shell
+geometry remain separate implementation steps.
+
+Macro LOD ownership was also tightened: macro tiles crossing the near-field
+ownership boundary are excluded, and the far ring begins where the near ring
+ends. This removes the direct near/far overlap that produced floating lines and
+z-fighting; stitched transition geometry is still required for a seamless
+future cube-sphere shell.
+
+The elevation source now enumerates every DEM tile crossed by a requested box.
+Previously, stepping from the first cell by one tile width could miss the
+neighboring source tile at a boundary, allowing a macro tile to build from
+nearest-resident fallback samples and appear as a false flat plane. The far
+macro ring also uses the near ring's `256 m` tile boundaries with a coarser
+interior grid, removing the previous `256 m`/`1024 m` T-junction at their
+transition.
+
+Chunk activation is now transactional around the player: movement requests new
+chunks without deleting the current active set, and the active set swaps only
+when the new center chunk is ready. Teleports explicitly clear the old active
+set before requesting the destination. Macro boundary tiles are retained and
+triangle-clipped at the inner radius instead of being discarded wholesale,
+which removes the missing radial section while keeping near/far ownership
+exclusive.
 
 ### Phase 3: Move the far shell to a cube-sphere quadtree
 

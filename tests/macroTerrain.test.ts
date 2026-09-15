@@ -11,6 +11,8 @@ import {
   MACRO_NEAR_RING,
   MACRO_FAR_RING,
   VOXEL_SKIP_HALF,
+  tileDistanceRange,
+  tileOverlapsRing,
 } from '../src/render/macroGeometry';
 import { ElevationSource, TileLoader } from '../src/sim/world/earth/elevationGrid';
 import { TILE_PX } from '../src/sim/world/earth/earthConfig';
@@ -110,11 +112,24 @@ async function main(): Promise<void> {
     'tiles far from the voxel box are not skipped',
     !intersectsVoxelBox(1024, 2048, 1024, 2048, 0, 0),
   );
+  const boundaryDistance = tileDistanceRange(-128, 128, -128, 128, 0, 0);
+  check(
+    'boundary tile range reaches the player-centered near band',
+    boundaryDistance.min === 0 && boundaryDistance.max === 128,
+  );
+  check(
+    'tile crossing the near ownership boundary is retained for clipping',
+    tileOverlapsRing(-128, 128, -128, 128, 0, 0, MACRO_NEAR_RING),
+  );
+  check(
+    'tile outside the near ownership boundary is retained',
+    tileOverlapsRing(128, 384, 128, 384, 0, 0, MACRO_NEAR_RING),
+  );
 
   // 4. Ring spans: near 256 m ring nests inside the far ring, far reaches 3 km+.
   check('near ring reaches past the voxel box', MACRO_NEAR_RING.outerRadius > VOXEL_SKIP_HALF * 2);
   check('far ring outer bound exceeds 3 km', MACRO_FAR_RING.outerRadius > 3000, MACRO_FAR_RING.outerRadius + ' m');
-  check('far ring starts inside the near ring outer bound', MACRO_FAR_RING.innerRadius < MACRO_NEAR_RING.outerRadius);
+  check('far ring starts at the near ring ownership boundary', MACRO_FAR_RING.innerRadius === MACRO_NEAR_RING.outerRadius);
 
   if (failures > 0) {
     throw new Error(failures + ' test(s) failed');

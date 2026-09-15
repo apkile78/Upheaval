@@ -13,7 +13,7 @@ import { Simulation } from './sim/simulation'
 import { EntityRenderer } from './render/entityRenderer'
 import { ChunkRenderer } from './render/chunkRenderer'
 import { createInitialPlayer, createPlayerEntity, syncPlayerEntity } from './sim/player'
-import { initInput, updatePlayerMovement } from './sim/playerController'
+import { initInput, updatePlayerMovement, consumeTerrainTeleportPending } from './sim/playerController'
 import { snapPlayerToGround } from './sim/terrainFollow'
 import { createEarthElevationSource, warmupAround } from './sim/world/earth/elevationLoader'
 import { EARTH_SPAWN, EARTH_SPAWN_LAT, EARTH_SPAWN_LON } from './sim/world/earth/earthConfig'
@@ -21,6 +21,7 @@ import { WaterPlane } from './render/waterPlane'
 import { MacroTerrainManager } from './render/macroTerrain'
 import { buildInitialChunkMeshes, chunkCoordAt, syncChunkMeshes } from './render/terrainView'
 import { updateFrameAnchor } from './render/frameAnchor'
+import { updateLocalEarthFrame } from './render/earth/localFrame'
 import type { Entity } from './types/ecs'
 import type { PlayerState } from './types/player'
 import { initRender, renderFrame, scene } from './render/canvas'
@@ -101,7 +102,12 @@ function gameLoopTick(now: number): void {
   // Drain fixed steps
   while (accumulator >= FIXED_DT_MS) {
     updatePlayerMovement(player, FIXED_DT_MS / 1000)
-    snapPlayerToGround(player, chunkManager, FIXED_DT_MS / 1000)
+    if (consumeTerrainTeleportPending()) {
+      chunkManager.clearActiveChunks()
+      chunkManager.updateActiveChunks(chunkCoordAt(player.transform.position.x, 0, player.transform.position.z), VOXEL_RENDER_RADIUS)
+    } else {
+      snapPlayerToGround(player, chunkManager, FIXED_DT_MS / 1000)
+    }
     syncPlayerEntity(simulation, playerEntity, player)
     updateChunks()
     simulation.setChunks(chunkManager.getActiveChunks())
@@ -115,7 +121,16 @@ function gameLoopTick(now: number): void {
 
   // Rebase the shared render-space frame anchor to the player before any
   // anchor-relative mesh updates below.
-  updateFrameAnchor(player.transform.position.x, player.transform.position.z)
+  const frameChanged = updateFrameAnchor(player.transform.position.x, player.transform.position.z)
+  const localFrameChanged = updateLocalEarthFrame(
+    player.transform.position.x,
+    player.transform.position.z,
+    player.transform.position.y - 0.9,
+  )
+  if (frameChanged || localFrameChanged) {
+    chunkRenderer.clear()
+    buildInitialChunkMeshes(chunkManager, chunkRenderer)
+  }
 
   // Update chunk terrain meshes, then re-seat them on the current anchor.
   syncChunkMeshes(chunkManager, chunkRenderer)
@@ -129,8 +144,11 @@ function gameLoopTick(now: number): void {
   updateTargetTile(player, chunkManager, selectionBox)
 
   // Sea-level water plane follows the player
-  const surfaceUnderPlayer = chunkManager.getHeightAt(player.transform.position.x, player.transform.position.z)
-  waterPlane.update(player.transform.position.x, player.transform.position.z, surfaceUnderPlayer <= 3)
+  const playerX = player.transform.position.x
+  const playerZ = player.transform.position.z
+  const surfaceReady = chunkManager.isHeightReady(playerX, playerZ)
+  const surfaceUnderPlayer = surfaceReady ? chunkManager.biomes.getElevation(playerX, playerZ) : 0
+  waterPlane.update(playerX, playerZ, surfaceReady && surfaceUnderPlayer <= 3)
 
   // Update entity renderer (sync ECS entities to meshes)
   entityRenderer.update()
@@ -158,10 +176,14 @@ async function init(): Promise<void> {
 
   // The frame anchor starts at spawn so the initial meshes below already sit
   // in correct render-space coordinates.
-  updateFrameAnchor(player.transform.position.x, player.transform.position.z)
-
   // 4. Snap player to terrain surface at start
   snapPlayerToGround(player, chunkManager, FIXED_DT_MS / 1000)
+  updateFrameAnchor(player.transform.position.x, player.transform.position.z)
+  updateLocalEarthFrame(
+    player.transform.position.x,
+    player.transform.position.z,
+    player.transform.position.y - 0.9,
+  )
 
   // 5. Simulation orchestrator (owns EntityManager, SpatialHashGrid, systems)
   simulation = new Simulation(8.0)

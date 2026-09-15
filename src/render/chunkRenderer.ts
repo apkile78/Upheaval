@@ -33,7 +33,7 @@ function countNeighbors(n?: NeighborHeightmaps): number {
 }
 
 /** Fog fade distance in meters (matches the sky background; hides LOD transitions). */
-export const TERRAIN_FOG_FAR = 7500;
+export const TERRAIN_FOG_FAR = 20000;
 
 export class ChunkRenderer {
   private scene: Scene;
@@ -45,7 +45,7 @@ export class ChunkRenderer {
   constructor(scene: Scene) {
     this.scene = scene;
     if (scene.fog === null) {
-      scene.fog = new Fog(0x1a1a2e, 1500, TERRAIN_FOG_FAR);
+      scene.fog = new Fog(0x1a1a2e, 12000, TERRAIN_FOG_FAR);
     }
   }
 
@@ -66,10 +66,8 @@ export class ChunkRenderer {
   * needs re-seating on a re-base. Call each frame after updateFrameAnchor.
    */
   syncAnchor(): void {
-    for (const [key, mesh] of this.meshes) {
-      const builtAt = this.meshAnchors.get(key);
-      if (builtAt === undefined) continue;
-      mesh.position.set(builtAt.x - frameAnchor.x, 0, builtAt.z - frameAnchor.z);
+    for (const mesh of this.meshes.values()) {
+      mesh.position.set(0, 0, 0);
     }
   }
 

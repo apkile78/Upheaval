@@ -100,10 +100,13 @@ export class ElevationSource implements EarthElevationSource {
   /** True when every tile overlapping the box (plus a sampling margin) is resident. */
   isReady(minX: number, minZ: number, maxX: number, maxZ: number): boolean {
     const { x0, x1, y0, y1 } = this.cellsForBox(minX, minZ, maxX, maxZ);
-    for (let gy = y0; gy <= y1; gy += TILE_PX) {
-      const row = Math.floor(Math.min(Math.max(gy, 0), GRID_ROWS - 1) / TILE_PX);
-      for (let gx = x0; gx <= x1; gx += TILE_PX) {
-        const col = Math.floor((((gx % GRID_COLS) + GRID_COLS) % GRID_COLS) / TILE_PX);
+    const rowStart = Math.floor(y0 / TILE_PX);
+    const rowEnd = Math.floor(y1 / TILE_PX);
+    const colStart = Math.floor(x0 / TILE_PX);
+    const colEnd = Math.floor(x1 / TILE_PX);
+    for (let row = rowStart; row <= rowEnd; row++) {
+      for (let colIndex = colStart; colIndex <= colEnd; colIndex++) {
+        const col = ((colIndex % TILES_X) + TILES_X) % TILES_X;
         if (!this.tiles.has(this.tileKey(row, col))) return false;
       }
     }
@@ -112,10 +115,13 @@ export class ElevationSource implements EarthElevationSource {
 
   requestArea(minX: number, minZ: number, maxX: number, maxZ: number): void {
     const { x0, x1, y0, y1 } = this.cellsForBox(minX, minZ, maxX, maxZ);
-    for (let gy = y0; gy <= y1; gy += TILE_PX) {
-      const row = Math.floor(Math.min(Math.max(gy, 0), GRID_ROWS - 1) / TILE_PX);
-      for (let gx = x0; gx <= x1; gx += TILE_PX) {
-        const col = Math.floor((((gx % GRID_COLS) + GRID_COLS) % GRID_COLS) / TILE_PX);
+    const rowStart = Math.floor(y0 / TILE_PX);
+    const rowEnd = Math.floor(y1 / TILE_PX);
+    const colStart = Math.floor(x0 / TILE_PX);
+    const colEnd = Math.floor(x1 / TILE_PX);
+    for (let row = rowStart; row <= rowEnd; row++) {
+      for (let colIndex = colStart; colIndex <= colEnd; colIndex++) {
+        const col = ((colIndex % TILES_X) + TILES_X) % TILES_X;
         const key = this.tileKey(row, col);
         if (this.tiles.has(key) || this.inflight.has(key)) continue;
         const promise = this.loader(row, col)

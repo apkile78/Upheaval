@@ -18,6 +18,7 @@ import type { EarthElevationSource } from '../types/world';
 import { frameAnchor } from './frameAnchor';
 import { getTypeFromHeight } from './chunkGeometry';
 import { BIOME_COLORS } from '../sim/world/biomeManager';
+import { currentLocalEarthFrame, worldToLocalEnu } from './earth/localFrame';
 
 /**
  * LOD ring layout: the macro shell builds two rings of differently-sized
@@ -32,20 +33,27 @@ export interface MacroRing {
   /** Ring bounds in meters from the player (center-basis X/Z radii). */
   innerRadius: number;
   outerRadius: number;
+  /** Whether tiles crossing the inner boundary belong to the previous ring. */
+  exclusiveInner?: boolean;
 }
+
+export const NORMAL_TERRAIN_RADIUS = 8000;
+export const HORIZON_TERRAIN_RADIUS = 20000;
+export const SCOPE_TERRAIN_RADIUS = 35000;
 
 export const MACRO_NEAR_RING: MacroRing = {
   tileSize: 256,
   gridPoints: 33,
   innerRadius: 96,
-  outerRadius: 1100,
+  outerRadius: 1280,
 };
 
 export const MACRO_FAR_RING: MacroRing = {
-  tileSize: 1024,
-  gridPoints: 33,
-  innerRadius: 768,
-  outerRadius: 3600,
+  tileSize: 256,
+  gridPoints: 9,
+  innerRadius: MACRO_NEAR_RING.outerRadius,
+  outerRadius: NORMAL_TERRAIN_RADIUS,
+  exclusiveInner: true,
 };
 
 /**
@@ -53,6 +61,44 @@ export const MACRO_FAR_RING: MacroRing = {
  * player. Tiles whose bounds intersect this box keep their voxel depiction.
  */
 export const VOXEL_SKIP_HALF = 112;
+
+/** Distance range of a tile bounds in the square render-distance metric. */
+export function tileDistanceRange(
+  minX: number,
+  maxX: number,
+  minZ: number,
+  maxZ: number,
+  centerWorldX: number,
+  centerWorldZ: number,
+): { min: number; max: number } {
+  const dx = Math.max(minX - centerWorldX, 0, centerWorldX - maxX);
+  const dz = Math.max(minZ - centerWorldZ, 0, centerWorldZ - maxZ);
+  const min = Math.max(dx, dz);
+  const max = Math.max(
+    Math.abs(minX - centerWorldX),
+    Math.abs(maxX - centerWorldX),
+    Math.abs(minZ - centerWorldZ),
+    Math.abs(maxZ - centerWorldZ),
+  );
+  return { min, max };
+}
+
+/** True when a macro tile bounds overlaps a render-distance band. */
+export function tileOverlapsRing(
+  minX: number,
+  maxX: number,
+  minZ: number,
+  maxZ: number,
+  centerWorldX: number,
+  centerWorldZ: number,
+  ring: MacroRing,
+): boolean {
+  const distance = tileDistanceRange(minX, maxX, minZ, maxZ, centerWorldX, centerWorldZ);
+  const reachesInnerBoundary = ring.exclusiveInner
+    ? distance.min >= ring.innerRadius
+    : distance.max >= ring.innerRadius;
+  return reachesInnerBoundary && distance.min <= ring.outerRadius;
+}
 
 /** True when a macro tile AABB intersects the voxel box around the player. */
 export function intersectsVoxelBox(
@@ -81,6 +127,9 @@ export function buildMacroTileGeometry(
   tileZ: number,
   tileSize: number,
   gridPoints: number,
+  clipCenterX?: number,
+  clipCenterZ?: number,
+  clipRadius?: number,
 ): BufferGeometry {
   const originX = tileX * tileSize;
   const originZ = tileZ * tileSize;
@@ -97,7 +146,12 @@ export function buildMacroTileGeometry(
       const height = source.sampleHeight(wx, wz);
 
       // Anchor-relative vertex (base offset applied once to the whole tile).
-      positions.push(wx - frameAnchor.x, height, wz - frameAnchor.z);
+      if (currentLocalEarthFrame === null) {
+        positions.push(wx - frameAnchor.x, height, wz - frameAnchor.z);
+      } else {
+        const local = worldToLocalEnu(wx, wz, height, currentLocalEarthFrame);
+        positions.push(local.east, local.up, -local.north);
+      }
 
       const type = getTypeFromHeight(height);
       const color = BIOME_COLORS[type as keyof typeof BIOME_COLORS] ?? BIOME_COLORS.grass;
@@ -107,6 +161,16 @@ export function buildMacroTileGeometry(
 
   for (let gz = 0; gz < gridPoints - 1; gz++) {
     for (let gx = 0; gx < gridPoints - 1; gx++) {
+      if (
+        clipCenterX !== undefined &&
+        clipCenterZ !== undefined &&
+        clipRadius !== undefined
+      ) {
+        const centerX = originX + (gx + 0.5) * step;
+        const centerZ = originZ + (gz + 0.5) * step;
+        const inside = Math.max(Math.abs(centerX - clipCenterX), Math.abs(centerZ - clipCenterZ)) < clipRadius;
+        if (inside) continue;
+      }
       const a = gz * gridPoints + gx;
       const b = gz * gridPoints + gx + 1;
       const c = (gz + 1) * gridPoints + gx;

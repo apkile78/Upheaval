@@ -107,6 +107,7 @@ export class ChunkManager {
 
   updateActiveChunks(centerCoord: ChunkCoordinate, radius: number): void {
     const newChunks = new Map<string, ChunkData>();
+    const centerKey = this.chunkKey({ x: centerCoord.x, y: 0, z: centerCoord.z });
 
     for (let dx = -radius; dx <= radius; dx++) {
       for (let dz = -radius; dz <= radius; dz++) {
@@ -135,7 +136,11 @@ export class ChunkManager {
       }
     }
 
-    this.activeChunks = newChunks;
+    if (newChunks.has(centerKey)) this.activeChunks = newChunks;
+  }
+
+  clearActiveChunks(): void {
+    this.activeChunks = new Map();
   }
 
   getActiveChunks(): WorldChunk[] {

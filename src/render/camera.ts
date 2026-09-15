@@ -16,6 +16,7 @@ import {
 import type { CameraViewMode, PlayerState } from '../types/player';
 import type { Vector3D } from '../types/world';
 import { frameAnchor } from './frameAnchor';
+import { currentLocalEarthFrame, worldToLocalEnu } from './earth/localFrame';
 
 /** Conversion factor: sim units to Three.js world units. */
 export const SCALE = 1;
@@ -45,7 +46,7 @@ export class CameraController {
       75, // field of view
       aspect,
       0.1, // near
-      8000, // far (covers the 3 km+ LOD shell + fog fade)
+      22000, // far (covers the normal shell and curved horizon)
     );
     this.perspectiveCamera.position.set(0 - frameAnchor.x, 1.7, 0 - frameAnchor.z); // eye height
 
@@ -83,7 +84,10 @@ export class CameraController {
 
   private updateFirstPerson(pos: Vector3D, rot: Vector3D): void {
     const cam = this.perspectiveCamera;
-    cam.position.set(pos.x * SCALE - frameAnchor.x, pos.y * SCALE + 0.7, pos.z * SCALE - frameAnchor.z);
+    const local = currentLocalEarthFrame === null
+      ? { east: pos.x * SCALE - frameAnchor.x, up: pos.y * SCALE, north: -(pos.z * SCALE - frameAnchor.z) }
+      : worldToLocalEnu(pos.x, pos.z, pos.y, currentLocalEarthFrame);
+    cam.position.set(local.east, local.up + 0.7, -local.north);
 
     // Three.js looks down -Z by default; the simulation's forward direction is +Z.
     cam.rotation.set(rot.x, rot.y - Math.PI, 0);
@@ -98,12 +102,10 @@ export class CameraController {
     const offsetX = -Math.sin(rot.y) * behind;
     const offsetZ = -Math.cos(rot.y) * behind;
 
-    cam.position.set(
-      pos.x * SCALE + offsetX - frameAnchor.x,
-      pos.y * SCALE + height,
-      pos.z * SCALE + offsetZ - frameAnchor.z,
-    );
-
-    cam.lookAt(pos.x * SCALE - frameAnchor.x, pos.y * SCALE, pos.z * SCALE - frameAnchor.z);
+    const local = currentLocalEarthFrame === null
+      ? { east: pos.x * SCALE - frameAnchor.x, up: pos.y * SCALE, north: -(pos.z * SCALE - frameAnchor.z) }
+      : worldToLocalEnu(pos.x, pos.z, pos.y, currentLocalEarthFrame);
+    cam.position.set(local.east + offsetX, local.up + height, -local.north + offsetZ);
+    cam.lookAt(local.east, local.up, -local.north);
   }
 }

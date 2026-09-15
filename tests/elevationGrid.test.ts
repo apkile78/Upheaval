@@ -101,10 +101,20 @@ async function main(): Promise<void> {
   check('tile A evicted after loading tile B', !tiny.isReady(inA.x - 1, inA.z - 1, inA.x + 1, inA.z + 1));
   check('tile B resident after eviction', tiny.isReady(inB.x - 1, inB.z - 1, inB.x + 1, inB.z + 1));
 
-  // 6. Missing-tile sampling falls back to sea level rather than garbage.
+  // 6. Areas crossing a DEM tile boundary must load both source tiles.
+  const boundary = new ElevationSource(makeLoader());
+  const boundaryX = TILE_PX * CELL_METERS;
+  boundary.requestArea(boundaryX - 5, c.z - 5, boundaryX + 5, c.z + 5);
+  await boundary.waitForArea();
+  check('tile-boundary area is ready only after both tiles load', boundary.isReady(
+    boundaryX - 5, c.z - 5, boundaryX + 5, c.z + 5,
+  ));
+  check('tile-boundary request loads both neighboring tiles', boundary.cachedTileCount() === 2, 'count ' + boundary.cachedTileCount());
+
+  // 7. Missing-tile sampling falls back to sea level rather than garbage.
   check('fallback outside resident tiles is 0', tiny.sampleHeight(inA.x, inA.z) === 0);
 
-  // 7. PNG channel decode roundtrip across the full elevation range.
+  // 8. PNG channel decode roundtrip across the full elevation range.
   let decodeOk = true;
   for (let v = -10900; v <= 8800; v += 977) {
     const packed = v + ELEV_OFFSET;

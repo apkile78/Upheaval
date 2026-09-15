@@ -7,6 +7,7 @@
 
 import { BoxGeometry, LineBasicMaterial, LineSegments, EdgesGeometry } from 'three';
 import { frameAnchor } from './frameAnchor';
+import { currentLocalEarthFrame, worldToLocalEnu } from './earth/localFrame';
 
 /** Wireframe color for the targeted tile outline. */
 const HIGHLIGHT_COLOR = 0x00ff88;
@@ -58,7 +59,12 @@ export class SelectionBox {
    * @param worldPos World-space position of the tile center.
    */
   updateFromWorldPos(worldPos: { x: number; y: number; z: number }): void {
-    this.mesh.position.set(worldPos.x - frameAnchor.x, worldPos.y, worldPos.z - frameAnchor.z);
+    if (currentLocalEarthFrame === null) {
+      this.mesh.position.set(worldPos.x - frameAnchor.x, worldPos.y, worldPos.z - frameAnchor.z);
+    } else {
+      const local = worldToLocalEnu(worldPos.x, worldPos.z, worldPos.y, currentLocalEarthFrame);
+      this.mesh.position.set(local.east, local.up, -local.north);
+    }
     this.mesh.visible = true;
   }
 
