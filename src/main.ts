@@ -12,13 +12,19 @@ import { ChunkManager } from './sim/world/chunkManager'
 import { Simulation } from './sim/simulation'
 import { EntityRenderer } from './render/entityRenderer'
 import { ChunkRenderer } from './render/chunkRenderer'
-import { createPlayerEntity, syncPlayerEntity } from './sim/player'
+import { createInitialPlayer, createPlayerEntity, syncPlayerEntity } from './sim/player'
 import { initInput, updatePlayerMovement } from './sim/playerController'
 import { snapPlayerToGround } from './sim/terrainFollow'
+import { createEarthElevationSource, warmupAround } from './sim/world/earth/elevationLoader'
+import { EARTH_SPAWN, EARTH_SPAWN_LAT, EARTH_SPAWN_LON } from './sim/world/earth/earthConfig'
+import { WaterPlane } from './render/waterPlane'
+import { MacroTerrainManager } from './render/macroTerrain'
+import { buildInitialChunkMeshes, chunkCoordAt, syncChunkMeshes } from './render/terrainView'
+import { updateFrameAnchor } from './render/frameAnchor'
 import type { Entity } from './types/ecs'
-import type { ChunkCoordinate } from './types/world'
 import type { PlayerState } from './types/player'
 import { initRender, renderFrame, scene } from './render/canvas'
+import { initCameraSwitching } from './render/cameraSwitching'
 import { selectionBox } from './render/selectionBox'
 import { updateTargetTile } from './render/targetTile'
 import { HUDManager } from './render/ui/hudManager'
@@ -46,6 +52,12 @@ let entityRenderer!: EntityRenderer
 /** Chunk Renderer for terrain meshes. */
 let chunkRenderer!: ChunkRenderer
 
+/** Macro terrain manager for the distance LOD shell. */
+let macroTerrain!: MacroTerrainManager
+
+/** Sea-level water plane (oceans over real bathymetry). */
+let waterPlane!: WaterPlane
+
 /** Player entity ID in ECS. */
 let playerEntity!: Entity
 
@@ -53,43 +65,16 @@ let playerEntity!: Entity
 let hudManager!: HUDManager
 
 // ---------------------------------------------------------------------------
-// Initial state construction
-// ---------------------------------------------------------------------------
-
-function createInitialPlayer(): PlayerState {
-  return {
-    id: 'player-001',
-    name: 'Survivor',
-    health: 100,
-    maxHealth: 100,
-    bodyPartHealth: {
-      head: 100, torso: 100, leftArm: 100, rightArm: 100, leftLeg: 100, rightLeg: 100,
-    },
-    bodyPartMaxHealth: {
-      head: 100, torso: 100, leftArm: 100, rightArm: 100, leftLeg: 100, rightLeg: 100,
-    },
-    inventory: { items: [], capacity: 100 },
-    transform: {
-      position: { x: 100, y: 0, z: 100 },
-      rotation: { x: 0, y: 0, z: 0 },
-    },
-    cameraMode: 'isometric',
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Fixed-step simulation update (60 Hz)
 // ---------------------------------------------------------------------------
 
 function updateChunks(): void {
   const pos = player.transform.position
-  const center: ChunkCoordinate = {
-    x: Math.floor(pos.x / 16),
-    y: Math.floor(pos.y / 16),
-    z: Math.floor(pos.z / 16),
-  }
-  chunkManager.updateActiveChunks(center, 4)
+  chunkManager.updateActiveChunks(chunkCoordAt(pos.x, pos.y, pos.z), VOXEL_RENDER_RADIUS)
 }
+
+/** Sim-chunk render radius (voxel layers stay close; the macro shell covers distance). */
+const VOXEL_RENDER_RADIUS = 6
 
 // ---------------------------------------------------------------------------
 // Target tile raycasting (updated every render frame)
@@ -128,14 +113,24 @@ function gameLoopTick(now: number): void {
   // Sync HUD health display
   hudManager.updateHealth(player.health, player.maxHealth)
 
-  // Update chunk terrain meshes
-const chunks = chunkManager.getActiveChunks();
-  const maps = chunks.map((ch) => chunkManager.getHeightmap(ch.coordinate)!);
-  const neighs = chunks.map((ch) => ({ ...ch.coordinate, y: 0 })).map(getNeighbors);
-  chunkRenderer.updateAllChunks(chunks, maps, neighs)
+  // Rebase the shared render-space frame anchor to the player before any
+  // anchor-relative mesh updates below.
+  updateFrameAnchor(player.transform.position.x, player.transform.position.z)
+
+  // Update chunk terrain meshes, then re-seat them on the current anchor.
+  syncChunkMeshes(chunkManager, chunkRenderer)
+  chunkRenderer.syncAnchor()
+
+  // Update the distant-terrain LOD shell around the player (fills everything
+  // outside the voxel box out to ~3.6 km).
+  macroTerrain.update(player.transform.position.x, player.transform.position.z)
 
   // Update target tile via raycast
   updateTargetTile(player, chunkManager, selectionBox)
+
+  // Sea-level water plane follows the player
+  const surfaceUnderPlayer = chunkManager.getHeightAt(player.transform.position.x, player.transform.position.z)
+  waterPlane.update(player.transform.position.x, player.transform.position.z, surfaceUnderPlayer <= 3)
 
   // Update entity renderer (sync ECS entities to meshes)
   entityRenderer.update()
@@ -146,51 +141,26 @@ const chunks = chunkManager.getActiveChunks();
 }
 
 // ---------------------------------------------------------------------------
-// Camera switching
-// ---------------------------------------------------------------------------
-
-function initCameraSwitching(): void {
-  window.addEventListener('keydown', (e: KeyboardEvent): void => {
-    if (e.key === '1') {
-      player.cameraMode = 'first-person'
-      cameraController.setMode('first-person')
-    } else if (e.key === '2') {
-      player.cameraMode = 'third-person'
-      cameraController.setMode('third-person')
-    } else if (e.key === '3') {
-      player.cameraMode = 'isometric'
-      cameraController.setMode('isometric')
-    }
-  })
-}
-
-// ---------------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------------
 
-/** Get all 8 neighbor heightmaps for seamless chunk edges (null when absent). */
-function getNeighbors(coord: { x: number; y: number; z: number }) {
-  return {
-    nw: chunkManager.getNeighborHeightmap(coord, -1, -1) ?? null,
-    n:  chunkManager.getNeighborHeightmap(coord, 0, -1) ?? null,
-    ne: chunkManager.getNeighborHeightmap(coord, 1, -1) ?? null,
-    w:  chunkManager.getNeighborHeightmap(coord, -1, 0) ?? null,
-    e:  chunkManager.getNeighborHeightmap(coord, 1, 0) ?? null,
-    sw: chunkManager.getNeighborHeightmap(coord, -1, 1) ?? null,
-    s:  chunkManager.getNeighborHeightmap(coord, 0, 1) ?? null,
-    se: chunkManager.getNeighborHeightmap(coord, 1, 1) ?? null,
-  };
-}
+async function init(): Promise<void> {
+  // 1. Real-Earth elevation source (tiled ETOPO 2022 assets, worker-decoded)
+  const earthSource = await createEarthElevationSource()
+  await warmupAround(earthSource, EARTH_SPAWN_LAT, EARTH_SPAWN_LON)
 
-function init(): void {
-  // 1. Simulation - initialise chunk manager and populate starter chunks
-  chunkManager = new ChunkManager(42)
-  chunkManager.updateActiveChunks({ x: 0, y: 0, z: 0 }, CHUNK_RENDER_RADIUS)
+  // 2. Simulation - chunk manager over real terrain, starter chunks at spawn
+  chunkManager = new ChunkManager(earthSource)
+  chunkManager.updateActiveChunks(chunkCoordAt(EARTH_SPAWN.x, 0, EARTH_SPAWN.z), CHUNK_RENDER_RADIUS)
 
-  // 2. Player state
+  // 3. Player state
   player = createInitialPlayer()
 
-  // 3. Snap player to terrain surface at start
+  // The frame anchor starts at spawn so the initial meshes below already sit
+  // in correct render-space coordinates.
+  updateFrameAnchor(player.transform.position.x, player.transform.position.z)
+
+  // 4. Snap player to terrain surface at start
   snapPlayerToGround(player, chunkManager, FIXED_DT_MS / 1000)
 
   // 5. Simulation orchestrator (owns EntityManager, SpatialHashGrid, systems)
@@ -201,7 +171,6 @@ function init(): void {
 
   // 7. Initialize input handling
   initInput()
-  initCameraSwitching()
 
   // 8. Initialize HUD and register event handlers
   hudManager = new HUDManager()
@@ -221,16 +190,22 @@ function init(): void {
   if (app === null) throw new Error('No #app element found in DOM')
   cameraController = initRender(app)
   cameraController.setMode(player.cameraMode)
+  // Camera key bindings need the controller instance to exist, so bind after
+  // initRender assigns it.
+  initCameraSwitching(cameraController, player)
 
   // 10. Entity Renderer (uses Simulation's EntityManager)
   entityRenderer = new EntityRenderer(simulation.entityManager, scene)
 
-  // 11. Chunk Renderer - create terrain meshes
+  // 11. Chunk Renderer - create terrain meshes for the starter chunks
   chunkRenderer = new ChunkRenderer(scene)
-  const initialChunks = chunkManager.getActiveChunks()
-  for (const chunk of initialChunks) {
-    chunkRenderer.updateChunkMesh(chunk, chunkManager.getHeightmap(chunk.coordinate)!, getNeighbors({ ...chunk.coordinate, y: 0 }))
-  }
+  buildInitialChunkMeshes(chunkManager, chunkRenderer)
+
+  // 11b. Distant-terrain LOD shell (anchor-relative macro tiles out to ~3.5 km)
+  macroTerrain = new MacroTerrainManager(scene, earthSource)
+
+  // 11b. Sea-level water plane
+  waterPlane = new WaterPlane(scene)
 
   // Add selection box to scene
   scene.add(selectionBox.meshRef)
@@ -241,9 +216,16 @@ function init(): void {
   requestAnimationFrame(gameLoopTick)
 }
 
-// Boot when DOM is ready
+// Boot when DOM ready. Elevation assets load asynchronously before the world
+// initializes; failures surface in the console.
+function boot(): void {
+  void init().catch((err: Error) => {
+    console.error('Earth terrain init failed:', err);
+  });
+}
+
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init)
+  document.addEventListener('DOMContentLoaded', boot)
 } else {
-  init()
+  boot()
 }

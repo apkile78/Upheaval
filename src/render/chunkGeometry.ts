@@ -6,6 +6,10 @@
  * player's bilinear height physics (terrainFollow.ts) and guarantees seamless
  * chunk borders (adjacent chunks sample the identical shared corner value).
  *
+ * Vertex positions use absolute world coordinates; the owning renderer places
+ * the mesh anchor-relative (see frameAnchor.ts) so far-from-origin vertices
+ * keep float32 precision.
+ *
  * Architecture: lives in /src/render/; imports Three.js.
  */
 
@@ -28,15 +32,19 @@ export interface NeighborHeightmaps {
   se: Float32Array | null;
 }
 
-/** Determine terrain type from elevation for coloring (decoupled from tile data). */
-function getTypeFromHeight(h: number): string {
+/** Determine terrain type from elevation for coloring (decoupled from tile data).
+ *  Bands are calibrated to real-Earth meters (1 unit = 1 m): sea level 0,
+ *  beaches ~3 m, lowlands, montane bands, permanent snow above ~4600 m.
+ *  Shared by the near-field chunk meshes and the distant macro terrain shell.
+ */
+export function getTypeFromHeight(h: number): string {
   if (h < 0) return 'water';
-  if (h < 5) return 'sand';
-  if (h < 50) return 'grass';
-  if (h < 200) return 'forest';
-  if (h < 500) return 'dirt';
-  if (h < 1000) return 'mountain';
-  if (h < 1500) return 'stone';
+  if (h < 3) return 'sand';
+  if (h < 150) return 'grass';
+  if (h < 1500) return 'forest';
+  if (h < 2800) return 'dirt';
+  if (h < 3800) return 'mountain';
+  if (h < 4600) return 'stone';
   return 'snow';
 }
 

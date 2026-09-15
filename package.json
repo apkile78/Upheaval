@@ -6,6 +6,9 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "type-check": "tsc --noEmit",
+    "test": "node scripts/run-tests.mjs",
+    "data:convert": "node scripts/convert-earth-dem.mjs",
+    "data:verify": "node scripts/verify-earth-tiles.mjs",
     "serve": "npx tsx test-server.mjs"
   },
   "dependencies": {

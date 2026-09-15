@@ -13,6 +13,7 @@ import { BoxGeometry, Mesh, MeshBasicMaterial, Scene, Material } from 'three';
 import type { Entity } from '../types/ecs';
 import type { TransformComponent, RenderableComponent } from '../types/ecs';
 import { EntityManager } from '../sim/ecs/entityManager';
+import { frameAnchor } from './frameAnchor';
 
 /**
  * Default scale for entities without explicit scale component.
@@ -112,7 +113,9 @@ export class EntityRenderer {
       }
 
       // Update mesh transform
-      mesh.position.set(transform.position.x, transform.position.y, transform.position.z);
+      // Entity transforms are sim-space; subtract the frame anchor so the mesh
+      // rides the shared render-space origin with the terrain.
+      mesh.position.set(transform.position.x - frameAnchor.x, transform.position.y, transform.position.z - frameAnchor.z);
 
       // Apply rotation (yaw around Y axis, pitch around X axis)
       mesh.rotation.set(transform.rotation.x || 0, transform.rotation.y || 0, 0);

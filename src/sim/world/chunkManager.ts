@@ -1,17 +1,21 @@
 /**
- * World chunk manager with East Coast terrain generation.
+ * World chunk manager backed by real-Earth elevation data.
+ *
+ * Chunks materialize only once the elevation tiles covering them (plus a
+ * bilinear margin) are resident in the source's LRU; areas that are still
+ * loading are re-requested and materialize on a later tick.
  *
  * Architecture: /src/sim/ layer — pure TypeScript, zero rendering imports.
  */
 
-import type { ChunkCoordinate, TerrainTile, WorldChunk } from '../../types/world';
+import type { ChunkCoordinate, EarthElevationSource, TerrainTile, WorldChunk } from '../../types/world';
 import { BiomeManager } from './biomeManager';
-import { MacroHeightmap } from './macroHeightmap';
-import { RiverGenerator } from './riverGenerator';
-import { carveRiverTiles } from './riverCarve';
-import { RegionMap, REGION_BIASES } from './regionMap';
+import { CELL_METERS } from './earth/earthConfig';
 
 export const CHUNK_SIZE = 16;
+
+/** Extra world-space margin around a chunk required for bilinear sampling. */
+const SAMPLE_MARGIN = Math.ceil(CELL_METERS) + 2;
 
 interface ChunkData {
   chunk: WorldChunk;
@@ -20,31 +24,18 @@ interface ChunkData {
 
 export class ChunkManager {
   private activeChunks: Map<string, ChunkData>;
-  private biomeManager: BiomeManager;
-  private riverGenerator: RiverGenerator;
+  private readonly elevationSource: EarthElevationSource;
+  private readonly biomeManager: BiomeManager;
 
-  constructor(baseSeed: number = 0) {
+  constructor(source: EarthElevationSource, seed: number = 0) {
     this.activeChunks = new Map();
-    this.biomeManager = new BiomeManager(baseSeed);
+    this.elevationSource = source;
+    this.biomeManager = new BiomeManager(source, seed);
+  }
 
-    // Macro-scale systems (Step 6.3/6.4): coarse sampler + deterministic
-    // river tracing, both driven by the meandering coast factor (Step 6.2).
-    const coastFactor = (wx: number, wz: number): number => this.biomeManager.getCoastFactor(wx, wz);
-    const macro = new MacroHeightmap(baseSeed, coastFactor);
-    this.riverGenerator = new RiverGenerator(baseSeed, macro, coastFactor, this.biomeManager.getLandmask.bind(this.biomeManager));
-    this.riverGenerator.generate();
-
-    // Region classification (Step 6.5/6.6): biases chunk generation nudging
-    // elevation/moisture output - never overriding the base noise - based on
-    // the archetype at each location, alongside intersecting river data.
-    const regionMap = new RegionMap(
-      baseSeed,
-      macro,
-      coastFactor,
-      this.riverGenerator,
-      this.biomeManager.getLandmask.bind(this.biomeManager),
-    );
-    this.biomeManager.setRegionProvider((wx: number, wz: number) => REGION_BIASES[regionMap.getRegionAt(wx, wz)]);
+  /** Exposed for callers that need biome queries (HUD, interaction, tests). */
+  get biomes(): BiomeManager {
+    return this.biomeManager;
   }
 
   generateChunk(coord: ChunkCoordinate): ChunkData {
@@ -71,20 +62,6 @@ export class ChunkManager {
     }
 
     const chunk = { coordinate: { ...coord }, tiles, seed: 0 };
-
-    // River carving (Step 6.4): if any traced river path passes near this
-    // chunk's bounds, carve its surface tiles to 'water'. Heightmap is left
-    // untouched so terrain-follow physics and render meshes stay consistent.
-    const pad = 128;
-    const minX = coord.x * CHUNK_SIZE - pad;
-    const maxX = (coord.x + 1) * CHUNK_SIZE + pad;
-    const minZ = coord.z * CHUNK_SIZE - pad;
-    const maxZ = (coord.z + 1) * CHUNK_SIZE + pad;
-    const riverPoints = this.riverGenerator.getRiverPointsNear(minX, minZ, maxX, maxZ);
-    if (riverPoints.length > 0) {
-      carveRiverTiles(chunk, riverPoints);
-    }
-
     return { chunk, heightmap };
   }
 
@@ -141,9 +118,18 @@ export class ChunkManager {
         const existing = this.activeChunks.get(key);
         if (existing !== undefined) {
           newChunks.set(key, existing);
-        } else {
-          newChunks.set(key, this.generateChunk(newCoord));
+          continue;
         }
+
+        const minX = newCoord.x * CHUNK_SIZE - SAMPLE_MARGIN;
+        const maxX = (newCoord.x + 1) * CHUNK_SIZE + SAMPLE_MARGIN;
+        const minZ = newCoord.z * CHUNK_SIZE - SAMPLE_MARGIN;
+        const maxZ = (newCoord.z + 1) * CHUNK_SIZE + SAMPLE_MARGIN;
+        if (!this.elevationSource.isReady(minX, minZ, maxX, maxZ)) {
+          this.elevationSource.requestArea(minX, minZ, maxX, maxZ);
+          continue; // tiles still loading; chunk materializes on a later tick
+        }
+        newChunks.set(key, this.generateChunk(newCoord));
       }
     }
 
@@ -172,5 +158,3 @@ export class ChunkManager {
     return coord.x + ',' + coord.y + ',' + coord.z;
   }
 }
-
-export const chunkManager: ChunkManager = new ChunkManager();
