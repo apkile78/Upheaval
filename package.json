@@ -9,7 +9,7 @@
     "test": "node scripts/run-tests.mjs",
     "data:convert": "node scripts/convert-earth-dem.mjs",
     "data:verify": "node scripts/verify-earth-tiles.mjs",
-    "serve": "npx tsx test-server.mjs"
+    "serve": "npm run build && npx tsx test-server.mjs"
   },
   "dependencies": {
     "localforage": "^1.10.0",

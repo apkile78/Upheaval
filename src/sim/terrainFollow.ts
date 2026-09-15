@@ -37,16 +37,10 @@ export function snapPlayerToGround(player: PlayerState, chunkMgr: ChunkManager, 
   const px = player.transform.position.x
   const pz = player.transform.position.z
 
-  // Bilinear interpolation across the 4 surrounding grid vertices.
-  // This matches the terrain mesh geometry exactly so the player rides ON the surface.
-  const x0 = Math.floor(px), z0 = Math.floor(pz)
-  const x1 = x0 + 1, z1 = z0 + 1
-  const tx = px - x0, tz = pz - z0
-  const h00 = chunkMgr.getHeightAt(x0, z0)
-  const h10 = chunkMgr.getHeightAt(x1, z0)
-  const h01 = chunkMgr.getHeightAt(x0, z1)
-  const h11 = chunkMgr.getHeightAt(x1, z1)
-  const surface = (h00 * (1 - tx) + h10 * tx) * (1 - tz) + (h01 * (1 - tx) + h11 * tx) * tz
+  if (!chunkMgr.isHeightReady(px, pz)) return
+
+  // Match the triangle interpolation used by the terrain mesh exactly.
+  const surface = chunkMgr.getHeightAt(px, pz)
 
   // Entity center: feet (at maxSurface) + half body height
   const targetY = surface + HALF_HEIGHT

@@ -3,12 +3,11 @@
  *
  * All mesh vertices use RAW heightmap corner values (no interpolation/averaging).
  * Triangles linearly interpolate between corners, which exactly matches the
- * player's bilinear height physics (terrainFollow.ts) and guarantees seamless
+ * player's triangle-surface height physics (terrainFollow.ts) and guarantees seamless
  * chunk borders (adjacent chunks sample the identical shared corner value).
  *
- * Vertex positions use absolute world coordinates; the owning renderer places
- * the mesh anchor-relative (see frameAnchor.ts) so far-from-origin vertices
- * keep float32 precision.
+ * Vertex positions are anchor-relative before Float32 conversion, preserving
+ * precision for the Earth-scale world.
  *
  * Architecture: lives in /src/render/; imports Three.js.
  */
@@ -16,6 +15,7 @@
 import { BufferGeometry, Float32BufferAttribute } from 'three';
 import type { WorldChunk } from '../types/world';
 import { BIOME_COLORS } from '../sim/world/biomeManager';
+import { frameAnchor } from './frameAnchor';
 
 const CHUNK_SIZE = 16;
 const TILE_SIZE = 1;
@@ -139,7 +139,7 @@ export function buildChunkGeometry(
 
       // RAW corner height - identical value both chunks compute for shared corners
       const height = sampleCorner(x, z, heightmap, neighbors);
-      positions.push(wx, height, wz);
+      positions.push(wx - frameAnchor.x, height, wz - frameAnchor.z);
 
       // Vertex color: dominant terrain type of the up-to-4 touching tiles
       const tx = Math.max(0, Math.min(CHUNK_SIZE - 1, x === gridW ? x - 1 : x));

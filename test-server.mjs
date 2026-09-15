@@ -1,5 +1,5 @@
 import { createServer } from 'http';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, statSync } from 'fs';
 import { join, extname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -139,12 +139,19 @@ if (failures.size > 0) {
 // ---------------------------------------------------------------------------
 
 const server = createServer((req, res) => {
-  const urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
+  let urlPath;
+  try {
+    urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
+  } catch {
+    res.writeHead(400, { 'Content-Type': 'text/plain' });
+    res.end('Invalid URL');
+    return;
+  }
   let filePath = join(distDir, urlPath === '/' ? 'index.html' : urlPath);
 
-  if (!existsSync(filePath)) {
+  if (!existsSync(filePath) || !statSync(filePath).isFile()) {
     const assetPath = join(__dirname, 'public', urlPath);
-    if (existsSync(assetPath)) {
+    if (existsSync(assetPath) && statSync(assetPath).isFile()) {
       filePath = assetPath;
     } else {
       res.writeHead(404, { 'Content-Type': 'text/plain' });

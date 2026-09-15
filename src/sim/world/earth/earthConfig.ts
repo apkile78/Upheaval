@@ -20,6 +20,11 @@ export const SEA_LEVEL = 0;
 export const EARTH_SPAWN_LAT = 51.5074; // London
 export const EARTH_SPAWN_LON = -0.1278;
 
+/** Debug destination for testing high-elevation terrain. */
+export const HIGH_ELEVATION_TEST_LAT = 27.9881;
+export const HIGH_ELEVATION_TEST_LON = 86.925;
+export const HIGH_ELEVATION_TEST_HEIGHT = 8050;
+
 /** Global elevation grid dimensions (1 arc-minute cells). */
 export const GRID_COLS = 21600; // 360 deg / 1 arcmin
 export const GRID_ROWS = 10800; // 180 deg / 1 arcmin

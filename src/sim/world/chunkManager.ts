@@ -73,34 +73,36 @@ export class ChunkManager {
     return { terrainType: type, elevation: surfaceHeight };
   }
 
-  /** Bilinear height lookup - smooth across chunk boundaries. */
+  /** Sample the rendered triangle surface across chunk boundaries. */
   getHeightAt(worldX: number, worldZ: number): number {
+    const cellX = Math.floor(worldX);
+    const cellZ = Math.floor(worldZ);
+    const tx = worldX - cellX;
+    const tz = worldZ - cellZ;
+    const h00 = this.getGridHeight(cellX, cellZ);
+    const h10 = this.getGridHeight(cellX + 1, cellZ);
+    const h01 = this.getGridHeight(cellX, cellZ + 1);
+    const h11 = this.getGridHeight(cellX + 1, cellZ + 1);
+
+    if (tx + tz <= 1) {
+      return h00 + tx * (h10 - h00) + tz * (h01 - h00);
+    }
+    return (1 - tz) * h10 + (1 - tx) * h01 + (tx + tz - 1) * h11;
+  }
+
+  isHeightReady(worldX: number, worldZ: number): boolean {
+    return this.elevationSource.isReady(worldX - 2, worldZ - 2, worldX + 2, worldZ + 2);
+  }
+
+  private getGridHeight(worldX: number, worldZ: number): number {
     const chunkX = Math.floor(worldX / CHUNK_SIZE);
     const chunkZ = Math.floor(worldZ / CHUNK_SIZE);
-    const key = chunkX + ',' + 0 + ',' + chunkZ;
-    const chunkData = this.activeChunks.get(key);
+    const chunkData = this.activeChunks.get(chunkX + ',0,' + chunkZ);
+    if (chunkData === undefined) return this.biomeManager.getElevation(worldX, worldZ);
 
-    if (!chunkData) return this.biomeManager.getElevation(worldX, worldZ);
-
-    const localX = ((worldX % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
-    const localZ = ((worldZ % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
-
-    const ix = Math.floor(localX);
-    const iz = Math.floor(localZ);
-    const tx = localX - ix;
-    const tz = localZ - iz;
-
-    const ix1 = Math.min(ix + 1, CHUNK_SIZE - 1);
-    const iz1 = Math.min(iz + 1, CHUNK_SIZE - 1);
-
-    const h00 = chunkData.heightmap[ix * CHUNK_SIZE + iz] || 0;
-    const h10 = chunkData.heightmap[ix1 * CHUNK_SIZE + iz] || 0;
-    const h01 = chunkData.heightmap[ix * CHUNK_SIZE + iz1] || 0;
-    const h11 = chunkData.heightmap[ix1 * CHUNK_SIZE + iz1] || 0;
-
-    const h0 = h00 * (1 - tx) + h10 * tx;
-    const h1 = h01 * (1 - tx) + h11 * tx;
-    return h0 * (1 - tz) + h1 * tz;
+    const localX = worldX - chunkX * CHUNK_SIZE;
+    const localZ = worldZ - chunkZ * CHUNK_SIZE;
+    return chunkData.heightmap[localX * CHUNK_SIZE + localZ] ?? 0;
   }
 
   updateActiveChunks(centerCoord: ChunkCoordinate, radius: number): void {

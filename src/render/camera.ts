@@ -85,10 +85,8 @@ export class CameraController {
     const cam = this.perspectiveCamera;
     cam.position.set(pos.x * SCALE - frameAnchor.x, pos.y * SCALE + 0.7, pos.z * SCALE - frameAnchor.z);
 
-    // Rotate camera to match player heading (yaw) and look-down (pitch)
-    cam.rotation.set(0, 0, 0);
-    cam.rotateY(-rot.y);
-    cam.rotateX(rot.x);
+    // Three.js looks down -Z by default; the simulation's forward direction is +Z.
+    cam.rotation.set(rot.x, rot.y - Math.PI, 0);
   }
 
   private updateThirdPerson(pos: Vector3D, rot: Vector3D): void {
@@ -97,9 +95,8 @@ export class CameraController {
     const height = 3;
 
     // Use player rotation to offset camera position behind the player
-    const yawRad = -rot.y;
-    const offsetX = Math.sin(yawRad) * behind;
-    const offsetZ = Math.cos(yawRad) * behind;
+    const offsetX = -Math.sin(rot.y) * behind;
+    const offsetZ = -Math.cos(rot.y) * behind;
 
     cam.position.set(
       pos.x * SCALE + offsetX - frameAnchor.x,

@@ -9,12 +9,19 @@
  */
 
 import type { PlayerState } from '../types/player';
+import { latLonToWorld } from './world/earth/earthProjection';
+import {
+  HIGH_ELEVATION_TEST_HEIGHT,
+  HIGH_ELEVATION_TEST_LAT,
+  HIGH_ELEVATION_TEST_LON,
+} from './world/earth/earthConfig';
 
 // ---------------------------------------------------------------------------
 // Input state
 // ---------------------------------------------------------------------------
 
 const keys = new Set<string>();
+let controlledPlayer: PlayerState | null = null;
 
 /** Movement speed in world units per second. */
 const MOVE_SPEED = 8;
@@ -29,7 +36,8 @@ const LOOK_SPEED = Math.PI;
 /**
  * Initialize keyboard input listeners.
  */
-export function initInput(): void {
+export function initInput(player: PlayerState): void {
+  controlledPlayer = player;
   window.addEventListener('keydown', handleKeyDown);
   window.addEventListener('keyup', handleKeyUp);
 }
@@ -42,10 +50,23 @@ function handleKeyDown(e: KeyboardEvent): void {
     e.preventDefault();
   }
 
+  if (e.key.toLowerCase() === 't' && controlledPlayer !== null) {
+    teleportToHighElevation(controlledPlayer);
+    e.preventDefault();
+  }
+
   // Prevent scrolling with arrow keys
   if (e.key.startsWith('Arrow')) {
     e.preventDefault();
   }
+}
+
+/** Move the player to the shipped high-elevation Earth test location. */
+export function teleportToHighElevation(player: PlayerState): void {
+  const destination = latLonToWorld(HIGH_ELEVATION_TEST_LAT, HIGH_ELEVATION_TEST_LON);
+  player.transform.position.x = destination.x;
+  player.transform.position.y = HIGH_ELEVATION_TEST_HEIGHT + 0.9;
+  player.transform.position.z = destination.z;
 }
 
 function handleKeyUp(e: KeyboardEvent): void {

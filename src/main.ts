@@ -170,7 +170,7 @@ async function init(): Promise<void> {
   playerEntity = createPlayerEntity(simulation, player)
 
   // 7. Initialize input handling
-  initInput()
+  initInput(player)
 
   // 8. Initialize HUD and register event handlers
   hudManager = new HUDManager()

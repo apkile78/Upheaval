@@ -38,6 +38,7 @@ export const TERRAIN_FOG_FAR = 7500;
 export class ChunkRenderer {
   private scene: Scene;
   private meshes = new Map<string, Mesh>();
+  private meshAnchors = new Map<string, { x: number; z: number }>();
   /** Neighbor count present when each mesh was last built (diff tracking). */
   private meshedNeighborCounts = new Map<string, number>();
 
@@ -52,20 +53,23 @@ export class ChunkRenderer {
     const key = this.chunkKey(chunk.coordinate);
     this.removeChunkMesh(key);
     const mesh = this.createChunkMesh(chunk, heightmap, neighbors);
-    mesh.position.set(-frameAnchor.x, 0, -frameAnchor.z);
+    mesh.position.set(0, 0, 0);
     this.meshes.set(key, mesh);
+    this.meshAnchors.set(key, { x: frameAnchor.x, z: frameAnchor.z });
     this.scene.add(mesh);
     this.meshedNeighborCounts.set(key, countNeighbors(neighbors));
   }
 
   /**
    * Re-anchor every cached mesh to the current frame anchor. Geometry vertices
-   * carry absolute world heights, so only the mesh origin needs re-seating on
-   * a re-base (no rebuild). Call each frame after updateFrameAnchor.
+  * carry coordinates relative to the build anchor, so only the mesh origin
+  * needs re-seating on a re-base. Call each frame after updateFrameAnchor.
    */
   syncAnchor(): void {
-    for (const mesh of this.meshes.values()) {
-      mesh.position.set(-frameAnchor.x, 0, -frameAnchor.z);
+    for (const [key, mesh] of this.meshes) {
+      const builtAt = this.meshAnchors.get(key);
+      if (builtAt === undefined) continue;
+      mesh.position.set(builtAt.x - frameAnchor.x, 0, builtAt.z - frameAnchor.z);
     }
   }
 
@@ -77,6 +81,7 @@ export class ChunkRenderer {
       this.scene.remove(mesh);
       this.meshes.delete(key);
       this.meshedNeighborCounts.delete(key);
+      this.meshAnchors.delete(key);
     }
   }
 
@@ -99,6 +104,7 @@ export class ChunkRenderer {
         this.scene.remove(mesh);
         this.meshes.delete(key);
         this.meshedNeighborCounts.delete(key);
+        this.meshAnchors.delete(key);
       }
     }
 
@@ -119,6 +125,7 @@ export class ChunkRenderer {
     }
     this.meshes.clear();
     this.meshedNeighborCounts.clear();
+    this.meshAnchors.clear();
   }
 
   private chunkKey(coord: ChunkCoordinate): string {
